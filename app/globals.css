@@ -836,6 +836,19 @@
   animation: bounceSlow 8s ease-in-out infinite;
 }
 
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 28s linear infinite;
+}
+
 .card-transition {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
