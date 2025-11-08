@@ -54,12 +54,34 @@ const orbitUsers: OrbitUser[] = [
 ]
 
 function AmbientParticles() {
+  const starParticles = useMemo(
+    () =>
+      Array.from({ length: 80 }, (_, index) => ({
+        left: Math.random() * 100,
+        top: Math.random() * 100,
+        delay: Math.random() * 12,
+        scale: 0.6 + Math.random() * 0.8,
+        duration: 6 + Math.random() * 8,
+        id: `star-${index}`,
+      })),
+    [],
+  )
+
   return (
     <div className="pointer-events-none absolute inset-0 -z-10">
       <LaserFlowBackground />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(14,19,32,0.6),_rgba(9,11,18,1))]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.25),transparent_60%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(9,11,18,0.4),rgba(9,12,18,0.92))]" />
+      <motion.div
+        className="absolute inset-0 opacity-40"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 20% 20%, rgba(56,189,248,0.12), transparent 40%), radial-gradient(circle at 80% 30%, rgba(168,85,247,0.1), transparent 45%), radial-gradient(circle at 50% 70%, rgba(59,130,246,0.12), transparent 50%)",
+        }}
+        animate={{ scale: [1, 1.08, 1], rotate: [0, 4, -2, 0], opacity: [0.3, 0.55, 0.3] }}
+        transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
+      />
       <motion.div
         className="absolute inset-0 opacity-30"
         style={{
@@ -112,6 +134,15 @@ function AmbientParticles() {
         animate={{ opacity: [0, 0.6, 0], scaleX: [0.7, 1.05, 0.8] }}
         transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
       />
+      {starParticles.map((star) => (
+        <motion.span
+          key={star.id}
+          className="absolute h-0.5 w-0.5 rounded-full bg-white/70 shadow-[0_0_12px_rgba(255,255,255,0.6)]"
+          style={{ left: `${star.left}%`, top: `${star.top}%`, transformOrigin: "center" }}
+          animate={{ opacity: [0, 0.9, 0], scale: [0.3, star.scale, 0.3] }}
+          transition={{ duration: star.duration, delay: star.delay, repeat: Infinity, ease: "easeInOut" }}
+        />
+      ))}
     </div>
   )
 }
