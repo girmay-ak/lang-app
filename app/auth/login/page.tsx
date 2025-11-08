@@ -34,9 +34,9 @@ const particleConfigs = [
 ] as const
 
 const avatarConfigs = [
-  { bg: "bg-[#ec4899]/90", Icon: Users },
+  { bg: "bg-[#ec4899]/90", Icon: Users, iconClass: "" },
   { bg: "bg-white/90", Icon: MessageCircle, iconClass: "text-[#7c3aed]" },
-  { bg: "bg-[#34d399]/90", Icon: Users },
+  { bg: "bg-[#34d399]/90", Icon: Users, iconClass: "" },
 ] as const
 
 function ParticleField() {
@@ -83,7 +83,8 @@ export default function LoginPage() {
         const { error: magicError } = await supabase.auth.signInWithOtp({
           email,
           options: {
-            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
+            emailRedirectTo:
+              process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/app`,
           },
         })
 
