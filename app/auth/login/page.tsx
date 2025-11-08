@@ -83,7 +83,7 @@ export default function LoginPage() {
         const { error: magicError } = await supabase.auth.signInWithOtp({
           email,
           options: {
-            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/auth/callback`,
+            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
           },
         })
 
