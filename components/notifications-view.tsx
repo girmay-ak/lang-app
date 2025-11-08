@@ -60,21 +60,11 @@ export function NotificationsView() {
           .limit(50)
 
         if (error) {
-          // Supabase errors need to be parsed from JSON string
-          let errorData: any = {}
-          try {
-            const errorJson = JSON.stringify(error, null, 2)
-            errorData = JSON.parse(errorJson)
-            console.error("[v0] Error fetching notifications:", {
-              message: errorData.message || "Unknown error",
-              code: errorData.code || "unknown",
-              details: errorData.details || null,
-              hint: errorData.hint || null,
-            })
-          } catch (e) {
-            // Fallback if stringify/parse fails
-            console.error("[v0] Error fetching notifications:", error)
-          }
+          console.error("[v0] Error fetching notifications:", {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+          })
           setIsLoading(false)
           return
         }
