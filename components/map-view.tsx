@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Filter, Users, Zap } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Filter, Users, Zap, X } from "lucide-react"
 import { MapboxMap } from "./mapbox-map"
 import { FilterPanel } from "./filter-panel"
 import { useMap } from "@/hooks/use-map"
@@ -144,20 +145,10 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   const [selectedUser, setSelectedUser] = useState<MapUser | null>(null)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false)
-  useEffect(() => {
-    if (!onRegisterAvailabilityToggle) return
-
-    const openAvailability = () => {
-      setIsAvailabilityModalOpen(true)
-    }
-
-    onRegisterAvailabilityToggle(openAvailability)
-
-    return () => {
-      onRegisterAvailabilityToggle(null)
-    }
-  }, [onRegisterAvailabilityToggle])
   const [isAvailable, setIsAvailable] = useState(false)
+  const [availabilityDuration, setAvailabilityDuration] = useState<number>(60)
+  const [tempIsAvailable, setTempIsAvailable] = useState(false)
+  const [tempAvailabilityDuration, setTempAvailabilityDuration] = useState<number>(60)
   const [filterDistance, setFilterDistance] = useState(25)
   const [filterAvailableNow, setFilterAvailableNow] = useState(false)
   const [filterSkillLevel, setFilterSkillLevel] = useState<string[]>([])
@@ -247,6 +238,27 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     lng: FALLBACK_CITY_CENTER.longitude,
   }
 
+  useEffect(() => {
+    if (!onRegisterAvailabilityToggle) return
+
+    const openAvailability = () => {
+      setIsAvailabilityModalOpen(true)
+    }
+
+    onRegisterAvailabilityToggle(openAvailability)
+
+    return () => {
+      onRegisterAvailabilityToggle(null)
+    }
+  }, [onRegisterAvailabilityToggle])
+
+  useEffect(() => {
+    if (isAvailabilityModalOpen) {
+      setTempIsAvailable(isAvailable)
+      setTempAvailabilityDuration(availabilityDuration)
+    }
+  }, [isAvailabilityModalOpen, isAvailable, availabilityDuration])
+
   const handleRefresh = () => {
     refetch().catch((error) => {
       console.error("[MapView] Refresh failed:", error)
@@ -258,16 +270,13 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     onProfileModalChange?.(user !== null)
   }
 
-  const handleAvailabilityToggle = (_duration: string) => {
-    setIsAvailable(true)
-    setIsAvailabilityModalOpen(false)
-    setFilterAvailableNow(true)
-  }
+  const durationOptions = [30, 60, 90, 120] as const
 
-  const handleAvailabilityOff = () => {
-    setIsAvailable(false)
+  const handleSaveAvailability = () => {
+    setIsAvailable(tempIsAvailable)
+    setAvailabilityDuration(tempAvailabilityDuration)
+    setFilterAvailableNow(tempIsAvailable)
     setIsAvailabilityModalOpen(false)
-    setFilterAvailableNow(false)
   }
 
   if (selectedUser) {
@@ -601,86 +610,103 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       {isAvailabilityModalOpen && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 animate-fade-in">
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md"
             onClick={() => setIsAvailabilityModalOpen(false)}
           />
 
-          <Card className="relative w-full max-w-sm bg-white/95 backdrop-blur-xl border-0 shadow-2xl rounded-3xl p-8 animate-scale-in">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                <Zap className="h-8 w-8 text-white" />
+          <div className="relative w-full max-w-md rounded-[32px] border border-white/10 bg-[#0b122a]/95 px-6 py-7 text-white shadow-[0_45px_120px_rgba(5,6,24,0.65)] backdrop-blur-[32px] sm:px-8">
+            <div className="flex items-start justify-between gap-6">
+              <div>
+                <p className="text-xs uppercase tracking-[0.35em] text-white/40">Set Availability</p>
+                <h3 className="mt-2 text-2xl font-semibold">Let friends know you’re free</h3>
+                <p className="mt-1 text-sm text-white/60">
+                  Toggle your availability to show up for nearby learners in Den Haag.
+                </p>
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Available for Practice</h3>
-              <p className="text-gray-600 text-sm">Let others know you're ready for language exchange!</p>
-            </div>
-
-            <div className="space-y-3 mb-6">
               <button
-                onClick={() => handleAvailabilityToggle("15 min")}
-                className="w-full p-4 rounded-2xl bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border-2 border-green-200 hover:border-green-300 transition-all text-left group"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900 group-hover:text-green-700">Quick Chat</p>
-                    <p className="text-sm text-gray-600">15 minutes</p>
-                  </div>
-                  <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white font-bold shadow-md">
-                    15
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleAvailabilityToggle("30 min")}
-                className="w-full p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 border-2 border-blue-200 hover:border-blue-300 transition-all text-left group"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900 group-hover:text-blue-700">Standard Session</p>
-                    <p className="text-sm text-gray-600">30 minutes</p>
-                  </div>
-                  <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold shadow-md">
-                    30
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleAvailabilityToggle("1 hour")}
-                className="w-full p-4 rounded-2xl bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 border-2 border-purple-200 hover:border-purple-300 transition-all text-left group"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900 group-hover:text-purple-700">Deep Dive</p>
-                    <p className="text-sm text-gray-600">1 hour</p>
-                  </div>
-                  <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold shadow-md">
-                    1h
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            {isAvailable && (
-              <Button
-                onClick={handleAvailabilityOff}
-                variant="outline"
-                className="w-full h-12 rounded-2xl border-2 border-red-200 text-red-600 hover:bg-red-50 font-semibold bg-transparent"
-              >
-                Turn Off Availability
-              </Button>
-            )}
-
-            {!isAvailable && (
-              <Button
+                type="button"
                 onClick={() => setIsAvailabilityModalOpen(false)}
-                variant="ghost"
-                className="w-full h-12 rounded-2xl text-gray-600 hover:bg-gray-100 font-semibold"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition hover:bg-white/15"
               >
-                Cancel
-              </Button>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="flex items-center gap-2 text-sm font-semibold text-white">
+                    <Zap className="h-4 w-4 text-emerald-300" />
+                    Available Now
+                  </p>
+                  <p className="mt-1 text-xs text-white/60">
+                    When enabled, other users can see you’re available for language exchange.
+                  </p>
+                </div>
+                <Switch checked={tempIsAvailable} onCheckedChange={setTempIsAvailable} />
+              </div>
+            </div>
+
+            {tempIsAvailable ? (
+              <>
+                <div className="mt-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/40">Duration</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {durationOptions.map((minutes) => (
+                      <button
+                        type="button"
+                        key={minutes}
+                        onClick={() => setTempAvailabilityDuration(minutes)}
+                        className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
+                          tempAvailabilityDuration === minutes
+                            ? "border-emerald-400 bg-emerald-500/20 text-emerald-100"
+                            : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                        }`}
+                      >
+                        {minutes}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/40">Location</p>
+                    <p className="mt-1 text-sm font-medium text-white">
+                      {effectiveUserLocation
+                        ? `${effectiveUserLocation.lat.toFixed(3)}° N, ${effectiveUserLocation.lng.toFixed(3)}° E`
+                        : "Location unavailable"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-sky-300 hover:bg-white/10"
+                  >
+                    Change
+                  </button>
+                </div>
+
+                <div className="mt-6 rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100">
+                  You’ll be visible to nearby users for {tempAvailabilityDuration} minutes.
+                </div>
+              </>
+            ) : (
+              <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 px-4 py-5 text-center text-sm text-white/60">
+                You&apos;re currently unavailable
+              </div>
             )}
-          </Card>
+
+            <Button
+              onClick={handleSaveAvailability}
+              className={`mt-8 h-12 w-full rounded-full text-sm font-semibold shadow-lg transition ${
+                tempIsAvailable
+                  ? "bg-gradient-to-r from-emerald-400 to-emerald-500 text-emerald-950 hover:from-emerald-500 hover:to-emerald-600"
+                  : "bg-white/10 text-white hover:bg-white/15"
+              }`}
+            >
+              {tempIsAvailable ? "Set as Available" : "Set as Unavailable"}
+            </Button>
+          </div>
         </div>
       )}
 
