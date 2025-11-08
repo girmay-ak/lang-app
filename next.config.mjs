@@ -7,6 +7,8 @@ const nextConfig = {
     unoptimized: true,
   },
   webpack(config) {
+    config.cache = false
+
     config.resolve = config.resolve || {}
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
