@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Layers, Mountain, Satellite } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -27,9 +27,10 @@ interface User {
 interface MapboxMapProps {
   users: User[]
   onUserClick: (user: User) => void
+  currentUserLocation?: { lat: number; lng: number } | null
 }
 
-export function MapboxMap({ users, onUserClick }: MapboxMapProps) {
+export function MapboxMap({ users, onUserClick, currentUserLocation }: MapboxMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
@@ -39,25 +40,35 @@ export function MapboxMap({ users, onUserClick }: MapboxMapProps) {
 
   const add3DBuildings = (map: any, style: "standard" | "satellite" | "3d") => {
     try {
-      if (!map || !map.isStyleLoaded()) {
+      if (
+        !map ||
+        typeof map.isStyleLoaded !== "function" ||
+        typeof map.once !== "function" ||
+        typeof map.getSource !== "function" ||
+        typeof map.addLayer !== "function"
+      ) {
+        return
+      }
+
+      if (!map.isStyleLoaded()) {
         console.log("[v0] Map style not loaded yet, waiting...")
         map.once("styledata", () => add3DBuildings(map, style))
         return
       }
 
       // Remove existing building layer if it exists
-      if (map.getLayer("3d-buildings")) {
+      if (typeof map.getLayer === "function" && map.getLayer("3d-buildings")) {
         map.removeLayer("3d-buildings")
       }
 
       // Check if the composite source exists (required for 3D buildings)
-      const source = map.getSource("composite")
+      const source = typeof map.getSource === "function" ? map.getSource("composite") : null
       if (!source) {
         console.log("[v0] Composite source not available in this style, skipping 3D buildings")
         return
       }
 
-      const mapStyle = map.getStyle()
+      const mapStyle = typeof map.getStyle === "function" ? map.getStyle() : null
       if (!mapStyle || !mapStyle.layers) {
         console.log("[v0] Map style or layers not available yet")
         return
@@ -73,7 +84,16 @@ export function MapboxMap({ users, onUserClick }: MapboxMapProps) {
         }
       }
 
-      map.addLayer(
+      const addLayer =
+        typeof map.addLayer === "function"
+          ? map.addLayer.bind(map)
+          : null
+
+      if (!addLayer) {
+        return
+      }
+
+      addLayer(
         {
           id: "3d-buildings",
           source: "composite",
@@ -127,146 +147,157 @@ export function MapboxMap({ users, onUserClick }: MapboxMapProps) {
     }
   }
 
+  const clearMarkers = useCallback(() => {
+    markersRef.current.forEach((marker) => marker.remove())
+    markersRef.current = []
+  }, [])
+
+  const renderMarkers = useCallback(
+    (map: any, mapboxgl: any, sourceUsers: User[]) => {
+      clearMarkers()
+
+      sourceUsers.forEach((user) => {
+        const el = document.createElement("div")
+        el.className = "custom-mapbox-marker"
+        el.style.width = "80px"
+        el.style.height = "80px"
+        el.style.cursor = "pointer"
+
+        el.innerHTML = `
+          <div class="relative flex flex-col items-center">
+            <div class="w-16 h-16 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-gradient-to-br from-blue-400 to-purple-400 ring-4 ring-blue-400/30 transition-transform hover:scale-110 relative">
+              <img src="${user.image}" alt="${user.name}" class="w-full h-full object-cover" onerror="this.style.display='none'" />
+              <div class="absolute inset-0 flex items-center justify-center text-white text-xl font-bold">
+                ${user.name[0] ?? "U"}
+              </div>
+              ${
+                user.isOnline
+                  ? '<div class="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-3 border-white shadow-lg"></div>'
+                  : ""
+              }
+              <div class="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white shadow-lg flex items-center justify-center text-base border-2 border-white">
+                ${user.flag ?? "🌍"}
+              </div>
+            </div>
+            <div class="mt-1 bg-gray-900/80 backdrop-blur-sm px-2 py-1 rounded-full">
+              <span class="text-white text-xs font-semibold">${user.name}</span>
+            </div>
+            <div class="bg-blue-500/90 backdrop-blur-sm px-2 py-0.5 rounded-full">
+              <span class="text-white text-xs font-medium">${user.distance ?? "—"}</span>
+            </div>
+          </div>
+        `
+
+        el.addEventListener("click", () => {
+          onUserClick(user)
+        })
+
+        if (typeof user.lng !== "number" || typeof user.lat !== "number") {
+          return
+        }
+
+        const marker = new mapboxgl.default.Marker(el)
+          .setLngLat([user.lng, user.lat])
+          .setPopup(
+            new mapboxgl.default.Popup({ offset: 25, closeButton: false }).setHTML(`
+              <div class="text-center p-3">
+                <div class="text-lg font-bold mb-1">${user.name}</div>
+                <div class="text-sm text-gray-600 mb-2">${user.flag ?? "🌍"} ${user.language}</div>
+                <div class="text-xs text-gray-500">${user.distance ?? "—"} away</div>
+                <div class="text-xs text-gray-500 mt-1">${user.currentLocation ?? ""}</div>
+              </div>
+            `),
+          )
+          .addTo(map)
+
+        markersRef.current.push(marker)
+      })
+    },
+    [onUserClick, clearMarkers],
+  )
+
   useEffect(() => {
     if (typeof window === "undefined" || mapInstanceRef.current) return
 
-    const timeoutId = setTimeout(() => {
-      if (!mapRef.current) {
-        console.error("[v0] Map container ref is not available")
-        return
-      }
+    import("mapbox-gl")
+      .then((mapboxgl) => {
+        if (!mapRef.current) {
+          console.error("[v0] Map container ref is not available")
+          return
+        }
 
-      import("mapbox-gl")
-        .then((mapboxgl) => {
-          if (!mapRef.current) {
-            console.error("[v0] Map container ref became null during import")
-            return
-          }
+        mapboxgl.default.accessToken =
+          "pk.eyJ1IjoiZ2lybWF5bmwyMSIsImEiOiJjbWgyODQ4ancxNDdqMmlxeTY2aHFkdDdqIn0.kx667AeRIVB9gDo42gLOHA"
 
-          mapboxgl.default.accessToken =
-            "pk.eyJ1IjoiZ2lybWF5bmwyMSIsImEiOiJjbWgyODQ4ancxNDdqMmlxeTY2aHFkdDdqIn0.kx667AeRIVB9gDo42gLOHA"
+        try {
+          const map = new mapboxgl.default.Map({
+            container: mapRef.current,
+            style: "mapbox://styles/mapbox/dark-v11",
+            center: [currentUserLocation?.lng ?? 4.3007, currentUserLocation?.lat ?? 52.0705],
+            zoom: 13,
+            pitch: 0,
+            bearing: 0,
+          })
 
-          try {
-            const map = new mapboxgl.default.Map({
-              container: mapRef.current,
-              style: "mapbox://styles/mapbox/dark-v11",
-              center: [4.3007, 52.0705],
-              zoom: 13,
-              pitch: 0,
-              bearing: 0,
-            })
+          map.on("load", () => {
+            setIsLoaded(true)
 
-            map.on("load", () => {
-              setIsLoaded(true)
-
-              try {
-                map.addSource("mapbox-dem", {
-                  type: "raster-dem",
-                  url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-                  tileSize: 512,
-                  maxzoom: 14,
-                })
-                map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 })
-              } catch (error) {
-                console.error("[v0] Error adding terrain:", error)
-              }
-
-              // Add 3D buildings after terrain
-              add3DBuildings(map, "standard")
-
-              const updatedUsers = users.map((user, index) => {
-                const distances = [
-                  { lat: 52.0705, lng: 4.3007, distance: "0m" },
-                  { lat: 52.0755, lng: 4.3057, distance: "650m" },
-                  { lat: 52.0655, lng: 4.2957, distance: "1.2km" },
-                  { lat: 52.0805, lng: 4.3107, distance: "2.8km" },
-                  { lat: 52.0605, lng: 4.2907, distance: "3.5km" },
-                  { lat: 52.0855, lng: 4.3157, distance: "5km" },
-                ]
-                return {
-                  ...user,
-                  lat: distances[index % distances.length].lat,
-                  lng: distances[index % distances.length].lng,
-                  distance: distances[index % distances.length].distance,
+            try {
+              if (typeof map.getSource === "function" && !map.getSource("mapbox-dem")) {
+                if (typeof map.addSource === "function") {
+                  map.addSource("mapbox-dem", {
+                    type: "raster-dem",
+                    url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+                    tileSize: 512,
+                    maxzoom: 14,
+                  })
                 }
-              })
+              }
+              if (typeof map.setTerrain === "function") {
+                map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 })
+              }
+            } catch (error) {
+              console.error("[v0] Error adding terrain:", error)
+            }
 
-              updatedUsers.forEach((user) => {
-                const el = document.createElement("div")
-                el.className = "custom-mapbox-marker"
-                el.style.width = "80px"
-                el.style.height = "80px"
-                el.style.cursor = "pointer"
+            add3DBuildings(map, "standard")
+            renderMarkers(map, mapboxgl, users)
+          })
 
-                el.innerHTML = `
-                <div class="relative flex flex-col items-center">
-                  <div class="w-16 h-16 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-gradient-to-br from-blue-400 to-purple-400 ring-4 ring-blue-400/30 transition-transform hover:scale-110 relative">
-                    <img src="${user.image}" alt="${user.name}" class="w-full h-full object-cover" onerror="this.style.display='none'" />
-                    <div class="absolute inset-0 flex items-center justify-center text-white text-xl font-bold">
-                      ${user.name[0]}
-                    </div>
-                    ${
-                      user.isOnline
-                        ? '<div class="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-3 border-white shadow-lg"></div>'
-                        : ""
-                    }
-                    <div class="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white shadow-lg flex items-center justify-center text-base border-2 border-white">
-                      ${user.flag}
-                    </div>
-                  </div>
-                  <div class="mt-1 bg-gray-900/80 backdrop-blur-sm px-2 py-1 rounded-full">
-                    <span class="text-white text-xs font-semibold">${user.name}</span>
-                  </div>
-                  <div class="bg-blue-500/90 backdrop-blur-sm px-2 py-0.5 rounded-full">
-                    <span class="text-white text-xs font-medium">${user.distance}</span>
-                  </div>
-                </div>
-              `
-
-                el.addEventListener("click", () => {
-                  onUserClick(user)
-                })
-
-                const marker = new mapboxgl.default.Marker(el)
-                  .setLngLat([user.lng, user.lat])
-                  .setPopup(
-                    new mapboxgl.default.Popup({ offset: 25, closeButton: false }).setHTML(`
-                    <div class="text-center p-3">
-                      <div class="text-lg font-bold mb-1">${user.name}</div>
-                      <div class="text-sm text-gray-600 mb-2">${user.flag} ${user.language}</div>
-                      <div class="text-xs text-gray-500">${user.distance} away</div>
-                      <div class="text-xs text-gray-500 mt-1">${user.currentLocation}</div>
-                    </div>
-                  `),
-                  )
-                  .addTo(map)
-
-                markersRef.current.push(marker)
-              })
-            })
-
-            mapInstanceRef.current = map
-          } catch (error) {
-            console.error("[v0] Error initializing Mapbox:", error)
-          }
-        })
-        .catch((error) => {
-          console.error("[v0] Error loading Mapbox GL:", error)
-        })
-    }, 100)
+          mapInstanceRef.current = map
+        } catch (error) {
+          console.error("[v0] Error initializing Mapbox:", error)
+        }
+      })
+      .catch((error) => {
+        console.error("[v0] Error loading Mapbox GL:", error)
+      })
 
     return () => {
-      clearTimeout(timeoutId)
-
-      markersRef.current.forEach((marker) => marker.remove())
-      markersRef.current = []
-
+      clearMarkers()
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove()
         mapInstanceRef.current = null
       }
     }
-  }, [users, onUserClick])
+  }, [users, currentUserLocation, renderMarkers, clearMarkers])
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !isLoaded) return
+
+    import("mapbox-gl").then((mapboxgl) => {
+      renderMarkers(mapInstanceRef.current, mapboxgl, users)
+    })
+  }, [users, isLoaded, renderMarkers])
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !isLoaded || !currentUserLocation) return
+
+    mapInstanceRef.current.easeTo({
+      center: [currentUserLocation.lng, currentUserLocation.lat],
+      duration: 800,
+    })
+  }, [currentUserLocation, isLoaded])
 
   return (
     <div className="relative w-full h-full">

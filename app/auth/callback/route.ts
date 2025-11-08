@@ -31,6 +31,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // Redirect to home page after successful authentication
-  return NextResponse.redirect(`${origin}/`)
+  // Redirect to the main app after successful authentication
+  return NextResponse.redirect(`${origin}/app`)
 }

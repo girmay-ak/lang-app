@@ -1,13 +1,14 @@
 "use client"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Filter, Users, Zap } from "lucide-react"
 import { MapboxMap } from "./mapbox-map"
 import { FilterPanel } from "./filter-panel"
+import { useMap } from "@/hooks/use-map"
 
-interface User {
+interface MapUser {
   id: string
   name: string
   language: string
@@ -25,125 +26,113 @@ interface User {
   availableNow: boolean
   timePreference: string
   languagesSpoken: { language: string; flag: string; level: string }[]
+  isFallbackLocation?: boolean
 }
 
-const mockUsers: User[] = [
-  {
-    id: "1",
-    name: "Maria",
-    language: "Spanish",
-    flag: "🇪🇸",
-    distance: "0.3 km",
-    lat: 52.0705,
-    lng: 4.3007,
-    bio: "Native Spanish speaker 🇪🇸 learning Dutch 🇳🇱. Love practicing over coffee!",
-    availableFor: "30 min",
-    image: "/diverse-woman-smiling.png",
-    isOnline: true,
-    rating: 4.9,
-    responseTime: "2 min",
-    currentLocation: "Starbucks, Spui",
-    availableNow: true,
-    timePreference: "30-60 min sessions",
-    languagesSpoken: [
-      { language: "Spanish", flag: "🇪🇸", level: "Native" },
-      { language: "English", flag: "🇺🇸", level: "Fluent" },
-      { language: "Dutch", flag: "🇳🇱", level: "Learning" },
-    ],
-  },
-  {
-    id: "2",
-    name: "Yuki",
-    language: "Japanese",
-    flag: "🇯🇵",
-    distance: "0.5 km",
-    lat: 52.0715,
-    lng: 4.3017,
-    bio: "Native Japanese speaker 🇯🇵 teaching Japanese, learning English 🇬🇧",
-    availableFor: "1 hr",
-    image: "/serene-asian-woman.png",
-    isOnline: true,
-    rating: 5.0,
-    responseTime: "1 min",
-    currentLocation: "Haagse Bos Park",
-    availableNow: true,
-    timePreference: "1-2 hour sessions",
-    languagesSpoken: [
-      { language: "Japanese", flag: "🇯🇵", level: "Native" },
-      { language: "English", flag: "🇺🇸", level: "Learning" },
-      { language: "Dutch", flag: "🇳🇱", level: "Beginner" },
-    ],
-  },
-  {
-    id: "3",
-    name: "Pierre",
-    language: "French",
-    flag: "🇫🇷",
-    distance: "0.8 km",
-    lat: 52.0695,
-    lng: 4.3027,
-    bio: "French teacher 🇫🇷 helping with French, learning Dutch 🇳🇱",
-    availableFor: "15 min",
-    image: "/french-man.png",
-    isOnline: false,
-    rating: 4.7,
-    responseTime: "5 min",
-    currentLocation: "KB National Library",
-    availableNow: false,
-    timePreference: "15-30 min quick chats",
-    languagesSpoken: [
-      { language: "French", flag: "🇫🇷", level: "Native" },
-      { language: "English", flag: "🇺🇸", level: "Fluent" },
-      { language: "Dutch", flag: "🇳🇱", level: "Learning" },
-    ],
-  },
-  {
-    id: "4",
-    name: "Anna",
-    language: "German",
-    flag: "🇩🇪",
-    distance: "1.2 km",
-    lat: 52.0725,
-    lng: 4.2997,
-    bio: "German native 🇩🇪 teaching German, learning Spanish 🇪🇸",
-    availableFor: "30 min",
-    image: "/german-woman.jpg",
-    isOnline: true,
-    rating: 4.8,
-    responseTime: "3 min",
-    currentLocation: "Plein Café",
-    availableNow: true,
-    timePreference: "30-45 min sessions",
-    languagesSpoken: [
-      { language: "German", flag: "🇩🇪", level: "Native" },
-      { language: "English", flag: "🇺🇸", level: "Fluent" },
-      { language: "Spanish", flag: "🇪🇸", level: "Learning" },
-    ],
-  },
-  {
-    id: "5",
-    name: "Sophie",
-    language: "Dutch",
-    flag: "🇳🇱",
-    distance: "0.6 km",
-    lat: 52.071,
-    lng: 4.304,
-    bio: "Native Dutch speaker 🇳🇱 teaching Dutch, learning French 🇫🇷",
-    availableFor: "45 min",
-    image: "/diverse-person-smiling.png",
-    isOnline: true,
-    rating: 4.9,
-    responseTime: "2 min",
-    currentLocation: "Binnenhof",
-    availableNow: true,
-    timePreference: "30-60 min sessions",
-    languagesSpoken: [
-      { language: "Dutch", flag: "🇳🇱", level: "Native" },
-      { language: "English", flag: "🇺🇸", level: "Fluent" },
-      { language: "French", flag: "🇫🇷", level: "Learning" },
-    ],
-  },
-]
+const FALLBACK_CITY_CENTER = {
+  latitude: 52.0705,
+  longitude: 4.3007,
+}
+
+const DEN_HAAG_BOUNDS = {
+  north: 52.125,
+  south: 52.025,
+  east: 4.41,
+  west: 4.235,
+}
+
+const toPositiveHash = (value: string) => {
+  let hash = 0
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0
+  }
+  return hash
+}
+
+const generateDenHaagCoordinate = (userId: string, axis: "lat" | "lng", offset: number) => {
+  const hash = toPositiveHash(`${userId}-${axis}-${offset}`)
+  const normalized = (hash % 10000) / 10000
+
+  if (axis === "lat") {
+    return DEN_HAAG_BOUNDS.south + (DEN_HAAG_BOUNDS.north - DEN_HAAG_BOUNDS.south) * normalized
+  }
+
+  return DEN_HAAG_BOUNDS.west + (DEN_HAAG_BOUNDS.east - DEN_HAAG_BOUNDS.west) * normalized
+}
+
+const resolveUserCoordinates = (userId: string, latitude?: number | null, longitude?: number | null) => {
+  if (typeof latitude === "number" && typeof longitude === "number") {
+    return { latitude, longitude, isFallback: false }
+  }
+
+  return {
+    latitude: generateDenHaagCoordinate(userId, "lat", 1),
+    longitude: generateDenHaagCoordinate(userId, "lng", 2),
+    isFallback: true,
+  }
+}
+
+const LANGUAGE_FLAG_MAP: Record<string, string> = {
+  af: "🇿🇦",
+  ar: "🇸🇦",
+  de: "🇩🇪",
+  en: "🇬🇧",
+  es: "🇪🇸",
+  fr: "🇫🇷",
+  it: "🇮🇹",
+  ja: "🇯🇵",
+  nl: "🇳🇱",
+  pt: "🇵🇹",
+  ru: "🇷🇺",
+  sv: "🇸🇪",
+  zh: "🇨🇳",
+  "zh-tw": "🇹🇼",
+  japanese: "🇯🇵",
+  spanish: "🇪🇸",
+  french: "🇫🇷",
+  german: "🇩🇪",
+  english: "🇬🇧",
+  dutch: "🇳🇱",
+  portuguese: "🇵🇹",
+  italian: "🇮🇹",
+  arabic: "🇸🇦",
+  swedish: "🇸🇪",
+}
+
+const LANGUAGE_NAME_MAP: Record<string, string> = {
+  af: "Afrikaans",
+  ar: "Arabic",
+  de: "German",
+  en: "English",
+  es: "Spanish",
+  fr: "French",
+  it: "Italian",
+  ja: "Japanese",
+  nl: "Dutch",
+  pt: "Portuguese",
+  ru: "Russian",
+  sv: "Swedish",
+  zh: "Chinese",
+  "zh-tw": "Chinese (Traditional)",
+}
+
+const getLanguageFlag = (language: string): string => {
+  if (!language) return "🌍"
+  const key = language.toLowerCase()
+  return LANGUAGE_FLAG_MAP[key] || LANGUAGE_FLAG_MAP[key.slice(0, 2)] || "🌍"
+}
+
+const getLanguageName = (language: string): string => {
+  if (!language) return "Language"
+  const key = language.toLowerCase()
+  return LANGUAGE_NAME_MAP[key] || language.charAt(0).toUpperCase() + language.slice(1)
+}
+
+const formatDistance = (km?: number): string => {
+  if (typeof km !== "number" || Number.isNaN(km)) return "—"
+  if (km < 1) return `${Math.round(km * 1000)}m`
+  return `${km.toFixed(1)}km`
+}
 
 interface MapViewProps {
   onSetFlag: () => void
@@ -151,34 +140,127 @@ interface MapViewProps {
 }
 
 export function MapView({ onSetFlag, onProfileModalChange }: MapViewProps) {
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [selectedUser, setSelectedUser] = useState<MapUser | null>(null)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false)
   const [isAvailable, setIsAvailable] = useState(false)
-  const [availabilityDuration, setAvailabilityDuration] = useState<string | null>(null)
+  const [filterDistance, setFilterDistance] = useState(25)
+  const [filterAvailableNow, setFilterAvailableNow] = useState(false)
+  const [filterSkillLevel, setFilterSkillLevel] = useState<string[]>([])
 
-  const handleUserSelect = (user: User | null) => {
+  const {
+    users: nearbyUsers,
+    userLocation,
+    loading: isLoading,
+    error: loadError,
+    refetch,
+  } = useMap({
+    distance: filterDistance,
+    availableNow: filterAvailableNow,
+    languages: [],
+    skillLevel: filterSkillLevel,
+  })
+
+  const mapUsers = useMemo<MapUser[]>(() => {
+    return nearbyUsers.map((dbUser) => {
+      const coordinates = resolveUserCoordinates(dbUser.id, dbUser.latitude, dbUser.longitude)
+      const primaryLanguageCode = dbUser.languages_speak?.[0] ?? dbUser.languages_learn?.[0] ?? "en"
+      const languageName = getLanguageName(primaryLanguageCode)
+      const flag = getLanguageFlag(primaryLanguageCode)
+
+      const spoken = (dbUser.languages_speak ?? []).map((code) => ({
+        language: getLanguageName(code),
+        flag: getLanguageFlag(code),
+        level: "Native",
+      }))
+
+      const learning = (dbUser.languages_learn ?? []).map((code) => ({
+        language: getLanguageName(code),
+        flag: getLanguageFlag(code),
+        level: "Learning",
+      }))
+
+      const languagesSpoken = [...spoken, ...learning]
+
+      return {
+        id: dbUser.id,
+        name: dbUser.full_name ?? "Language Explorer",
+        language: languageName,
+        flag,
+        distance: dbUser.distanceFormatted ?? formatDistance(dbUser.distance),
+        lat: coordinates.latitude,
+        lng: coordinates.longitude,
+        bio: dbUser.bio ?? "Language enthusiast ready to connect.",
+        availableFor: "30 min",
+        image: dbUser.avatar_url ?? "/placeholder-user.jpg",
+        isOnline: Boolean(dbUser.is_online),
+        rating: 4.8,
+        responseTime: "2 min",
+        currentLocation: dbUser.city ?? "Unknown location",
+        availableNow: dbUser.availability_status === "available",
+        timePreference: dbUser.availability_status === "available" ? "Available now" : "Flexible schedule",
+        languagesSpoken:
+          languagesSpoken.length > 0
+            ? languagesSpoken
+            : [
+                {
+                  language: languageName,
+                  flag,
+                  level: "Native",
+                },
+              ],
+        isFallbackLocation: coordinates.isFallback,
+      }
+    })
+  }, [nearbyUsers])
+
+  useEffect(() => {
+    if (!selectedUser) return
+    const stillExists = mapUsers.some((user) => user.id === selectedUser.id)
+    if (!stillExists) {
+      setSelectedUser(null)
+      onProfileModalChange?.(false)
+    }
+  }, [mapUsers, onProfileModalChange, selectedUser])
+
+  useEffect(() => {
+    setIsAvailable(filterAvailableNow)
+  }, [filterAvailableNow])
+
+  const nearbyCount = mapUsers.length
+  const effectiveUserLocation = userLocation ?? {
+    lat: FALLBACK_CITY_CENTER.latitude,
+    lng: FALLBACK_CITY_CENTER.longitude,
+  }
+
+  const handleRefresh = () => {
+    refetch().catch((error) => {
+      console.error("[MapView] Refresh failed:", error)
+    })
+  }
+
+  const handleUserSelect = (user: MapUser | null) => {
     setSelectedUser(user)
     onProfileModalChange?.(user !== null)
   }
 
-  const handleAvailabilityToggle = (duration: string) => {
+  const handleAvailabilityToggle = (_duration: string) => {
     setIsAvailable(true)
-    setAvailabilityDuration(duration)
     setIsAvailabilityModalOpen(false)
+    setFilterAvailableNow(true)
   }
 
   const handleAvailabilityOff = () => {
     setIsAvailable(false)
-    setAvailabilityDuration(null)
     setIsAvailabilityModalOpen(false)
+    setFilterAvailableNow(false)
   }
 
   if (selectedUser) {
     return (
       <div className="h-full relative bg-gray-900">
         <div className="absolute inset-0 opacity-30">
-          <MapboxMap users={mockUsers} onUserClick={() => {}} />
+          <MapboxMap users={mapUsers} onUserClick={() => {}} currentUserLocation={effectiveUserLocation} />
         </div>
 
         <div className="absolute inset-0 flex items-center justify-end animate-slide-in-right">
@@ -269,16 +351,15 @@ export function MapView({ onSetFlag, onProfileModalChange }: MapViewProps) {
                 </Avatar>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">{selectedUser.name}</h2>
-                  <p className="text-gray-500 text-sm">@{selectedUser.name.toLowerCase()}</p>
-                  <p className="text-gray-600 text-sm mt-1">5 mutual interests</p>
+                  <p className="text-gray-500 text-sm">@{selectedUser.name.toLowerCase().replace(/\s+/g, "")}</p>
+                  <p className="text-gray-600 text-sm mt-1">
+                    {selectedUser.distance} · {selectedUser.timePreference}
+                  </p>
                 </div>
               </div>
 
               <Card className="p-5 mb-6 bg-gray-50 border-gray-200 rounded-2xl">
-                <p className="text-gray-800 mb-4 leading-relaxed">
-                  Looking for someone to practice Spanish with! I'm intermediate level and would love to meet for
-                  conversation practice. I can help you with Dutch in exchange. Let's meet at a café this weekend!
-                </p>
+                <p className="text-gray-800 mb-4 leading-relaxed">{selectedUser.bio}</p>
 
                 <div className="flex items-center gap-2 mb-4 bg-green-50 rounded-xl px-3 py-2 w-fit">
                   <svg
@@ -297,7 +378,7 @@ export function MapView({ onSetFlag, onProfileModalChange }: MapViewProps) {
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                     <line x1="12" x2="12" y1="19" y2="22" />
                   </svg>
-                  <span className="text-sm font-semibold text-gray-700">00:45 sec</span>
+                  <span className="text-sm font-semibold text-gray-700">{selectedUser.availableFor}</span>
                   <button className="ml-2 text-gray-500 hover:text-gray-700">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -317,15 +398,15 @@ export function MapView({ onSetFlag, onProfileModalChange }: MapViewProps) {
                 </div>
 
                 <div className="flex flex-wrap gap-2 mb-4">
-                  <span className="px-3 py-1 bg-white rounded-full text-sm flex items-center gap-1.5">
-                    🇪🇸 <span className="text-gray-700">Spanish</span>
-                  </span>
-                  <span className="px-3 py-1 bg-white rounded-full text-sm flex items-center gap-1.5">
-                    🇳🇱 <span className="text-gray-700">Dutch</span>
-                  </span>
-                  <span className="px-3 py-1 bg-white rounded-full text-sm flex items-center gap-1.5">
-                    ☕ <span className="text-gray-700">Coffee Chats</span>
-                  </span>
+                  {selectedUser.languagesSpoken.map((lang, index) => (
+                    <span
+                      key={`${lang.language}-${index}`}
+                      className="px-3 py-1 bg-white rounded-full text-sm flex items-center gap-1.5"
+                    >
+                      {lang.flag} <span className="text-gray-700">{lang.language}</span>
+                      <span className="text-xs uppercase tracking-wide text-gray-500">{lang.level}</span>
+                    </span>
+                  ))}
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-gray-200">
@@ -400,29 +481,9 @@ export function MapView({ onSetFlag, onProfileModalChange }: MapViewProps) {
                     <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
                     <circle cx="12" cy="10" r="3" />
                   </svg>
-                  <span className="font-medium">Mill Road, Cambridge CB1 2EW, UK</span>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <p className="text-gray-400 text-sm mb-4">23 responses</p>
-                <div className="space-y-4">
-                  <div className="flex gap-3">
-                    <Avatar className="h-10 w-10 flex-shrink-0">
-                      <AvatarImage src="/woman-pink.jpg" alt="Sandra B." />
-                      <AvatarFallback className="bg-pink-200 text-pink-700">S</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 bg-gray-100 rounded-2xl p-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-gray-900 text-sm">Sandra B.</span>
-                        <span className="text-gray-500 text-xs">@sandra.b</span>
-                      </div>
-                      <p className="text-gray-800 text-sm leading-relaxed mb-2">
-                        I'd love to join! I'm also learning Spanish and looking for practice partners. Count me in! 🇪🇸
-                      </p>
-                      <span className="text-gray-400 text-xs">Jan 25 10:32</span>
-                    </div>
-                  </div>
+                  <span className="font-medium">
+                    {selectedUser.currentLocation || "Location shared after matching"}
+                  </span>
                 </div>
               </div>
 
@@ -483,6 +544,45 @@ export function MapView({ onSetFlag, onProfileModalChange }: MapViewProps) {
   return (
     <div className="relative h-full w-full overflow-hidden bg-background">
       <FilterPanel isOpen={isFilterOpen} onClose={() => setIsFilterOpen(false)} />
+
+      {isLoading && (
+        <div className="absolute inset-0 z-[1200] flex items-center justify-center bg-slate-950/70 backdrop-blur-md">
+          <div className="text-center">
+            <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-sky-500 border-t-transparent" />
+            <p className="text-sm text-slate-200/80">Scanning for nearby partners...</p>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && loadError && (
+        <div className="absolute inset-x-4 top-20 z-[1200]">
+          <div className="rounded-2xl border border-red-400/40 bg-red-500/20 px-4 py-3 text-sm text-red-100 shadow-xl backdrop-blur">
+            <p className="font-semibold">We couldn&apos;t load nearby partners.</p>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="mt-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && !loadError && nearbyCount === 0 && (
+        <div className="absolute inset-0 z-[1100] flex items-center justify-center">
+          <div className="pointer-events-auto max-w-sm rounded-3xl border border-white/10 bg-white/5 px-6 py-8 text-center text-white backdrop-blur-2xl shadow-2xl">
+            <h3 className="text-lg font-semibold">No partners nearby yet</h3>
+            <p className="mt-2 text-sm text-white/70">Adjust your availability window or refresh to widen the search.</p>
+            <Button
+              onClick={handleRefresh}
+              className="mt-4 rounded-full bg-white/90 text-slate-900 hover:bg-white"
+            >
+              Refresh search
+            </Button>
+          </div>
+        </div>
+      )}
 
       {isAvailabilityModalOpen && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 animate-fade-in">
@@ -581,7 +681,7 @@ export function MapView({ onSetFlag, onProfileModalChange }: MapViewProps) {
 
         <div className="glass-button rounded-full px-4 py-2 pointer-events-auto flex items-center gap-2">
           <Users className="h-4 w-4 text-white" />
-          <span className="text-white font-semibold text-sm">{mockUsers.length} nearby</span>
+          <span className="text-white font-semibold text-sm">{nearbyCount} nearby</span>
         </div>
 
         <Button
@@ -598,7 +698,7 @@ export function MapView({ onSetFlag, onProfileModalChange }: MapViewProps) {
       </div>
 
       <div className="absolute inset-0">
-        <MapboxMap users={mockUsers} onUserClick={handleUserSelect} />
+        <MapboxMap users={mapUsers} onUserClick={handleUserSelect} currentUserLocation={effectiveUserLocation} />
       </div>
     </div>
   )

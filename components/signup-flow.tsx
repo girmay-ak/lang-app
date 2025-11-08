@@ -1,25 +1,41 @@
 "use client"
 
 import type React from "react"
-import { Search, ChevronDown } from "lucide-react" // Import Search and ChevronDown icons
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  LocateFixed,
+  MapPin,
+  Search,
+  Sparkles,
+  Upload,
+  X,
+} from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronLeft, ChevronRight, Upload, X, MapPin, Check } from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Globe, Sparkles } from "lucide-react"
 
 interface SignupFlowProps {
   onComplete: () => void
 }
 
-const LANGUAGES = [
+type Language = {
+  code: string
+  name: string
+  flag: string
+}
+
+const LANGUAGES: Language[] = [
   { code: "af", name: "Afrikaans", flag: "🇿🇦" },
   { code: "sq", name: "Albanian", flag: "🇦🇱" },
   { code: "am", name: "Amharic", flag: "🇪🇹" },
@@ -95,7 +111,7 @@ const LANGUAGES = [
   { code: "ro", name: "Romanian", flag: "🇷🇴" },
   { code: "ru", name: "Russian", flag: "🇷🇺" },
   { code: "sm", name: "Samoan", flag: "🇼🇸" },
-  { code: "gd", name: "Scottish Gaelic", flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿" },
+  { code: "gd", name: "Scottish Gaelic", flag: "🏴" },
   { code: "sr", name: "Serbian", flag: "🇷🇸" },
   { code: "st", name: "Sesotho", flag: "🇱🇸" },
   { code: "sn", name: "Shona", flag: "🇿🇼" },
@@ -120,723 +136,776 @@ const LANGUAGES = [
   { code: "ug", name: "Uyghur", flag: "🇨🇳" },
   { code: "uz", name: "Uzbek", flag: "🇺🇿" },
   { code: "vi", name: "Vietnamese", flag: "🇻🇳" },
-  { code: "cy", name: "Welsh", flag: "🏴󠁧󠁢󠁷󠁬󠁳󠁿" },
+  { code: "cy", name: "Welsh", flag: "🏴" },
   { code: "xh", name: "Xhosa", flag: "🇿🇦" },
   { code: "yi", name: "Yiddish", flag: "🇮🇱" },
   { code: "yo", name: "Yoruba", flag: "🇳🇬" },
   { code: "zu", name: "Zulu", flag: "🇿🇦" },
 ].sort((a, b) => a.name.localeCompare(b.name))
 
-const PROFICIENCY_LEVELS = [
+const STEP_META = [
   {
-    id: "beginner",
-    emoji: "🌱",
-    title: "Beginner",
-    description: "Just started learning or know very basics",
+    id: 1,
+    label: "Basics",
+    title: "Set up your account",
+    description: "Share a friendly name and secure your login in under a minute.",
   },
   {
-    id: "intermediate",
-    emoji: "📈",
-    title: "Intermediate",
-    description: "Can have simple conversations",
+    id: 2,
+    label: "Languages",
+    title: "Pick your languages",
+    description: "Let us know what you speak and what you’d love to learn. We’ll take care of the matching.",
   },
   {
-    id: "advanced",
-    emoji: "🎓",
-    title: "Advanced",
-    description: "Fluent with minor mistakes",
+    id: 3,
+    label: "Location",
+    title: "Share your location",
+    description: "Let us place you on the Den Haag map so we can surface language partners nearby.",
   },
   {
-    id: "native",
-    emoji: "⭐",
-    title: "Native",
-    description: "Native speaker or equivalent",
+    id: 4,
+    label: "Finish",
+    title: "Ready to explore",
+    description: "Review everything at a glance and dive straight into the community.",
   },
-]
+] as const
+
+const TOTAL_STEPS = STEP_META.length
 
 export function SignupFlow({ onComplete }: SignupFlowProps) {
+  const router = useRouter()
+
   const [step, setStep] = useState(1)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [passwordTouched, setPasswordTouched] = useState(false)
   const [emailTouched, setEmailTouched] = useState(false)
+  const [passwordTouched, setPasswordTouched] = useState(false)
   const [photo, setPhoto] = useState<string | null>(null)
-  const [speakLanguages, setSpeakLanguages] = useState<any[]>([])
-  const [learnLanguages, setLearnLanguages] = useState<any[]>([])
-  const [selectedSpeakLang, setSelectedSpeakLang] = useState("")
-  const [selectedLearnLang, setSelectedLearnLang] = useState("")
-  const [proficiencyLevel, setProficiencyLevel] = useState("")
-  const [locationEnabled, setLocationEnabled] = useState(false)
+  const [speakLanguages, setSpeakLanguages] = useState<Language[]>([])
+  const [learnLanguages, setLearnLanguages] = useState<Language[]>([])
+  const [speakOpen, setSpeakOpen] = useState(false)
+  const [learnOpen, setLearnOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
-  const isValidEmail = (value: string) => {
-    // Basic email format check
-    return /[^@\s]+@[^@\s]+\.[^@\s]+/.test(value)
-  }
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [locationStatus, setLocationStatus] = useState<"idle" | "loading" | "granted" | "denied">("idle")
+  const [locationCoords, setLocationCoords] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [locationMessage, setLocationMessage] = useState<string | null>(null)
+
+  const isValidEmail = (value: string) => /[^@\s]+@[^@\s]+\.[^@\s]+/.test(value)
 
   const isStrongPassword = (value: string) => {
-    // Minimum 8 chars; at least letters and numbers
-    if (value.length < 8) return false
+    if (value.length < 6) return false
     const hasLetter = /[A-Za-z]/.test(value)
     const hasNumber = /\d/.test(value)
     return hasLetter && hasNumber
   }
 
-  const [speakLangOpen, setSpeakLangOpen] = useState(false)
-  const [learnLangOpen, setLearnLangOpen] = useState(false)
-
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setPhoto(reader.result as string)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      const saved = localStorage.getItem("signup_location")
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed?.latitude && parsed?.longitude) {
+          setLocationCoords(parsed)
+          setLocationStatus("granted")
+          setLocationMessage("Location ready — we’ll show partners that are close by.")
+        }
       }
-      reader.readAsDataURL(file)
+    } catch (err) {
+      console.warn("[SignupFlow] Failed to read saved signup location:", err)
+    }
+  }, [])
+
+  const handlePhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onloadend = () => setPhoto(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  const addLanguage = (code: string, type: "speak" | "learn") => {
+    const language = LANGUAGES.find((item) => item.code === code)
+    if (!language) return
+
+    if (type === "speak") {
+      setSpeakLanguages((prev) => (prev.some((item) => item.code === code) ? prev : [...prev, language]))
+      setSpeakOpen(false)
+    } else {
+      setLearnLanguages((prev) => (prev.some((item) => item.code === code) ? prev : [...prev, language]))
+      setLearnOpen(false)
     }
   }
 
-  const addLanguage = (langCode: string, type: "speak" | "learn") => {
-    const lang = LANGUAGES.find((l) => l.code === langCode)
-    if (!lang) return
-
+  const removeLanguage = (code: string, type: "speak" | "learn") => {
     if (type === "speak") {
-      if (!speakLanguages.find((l) => l.code === langCode)) {
-        setSpeakLanguages([...speakLanguages, lang])
-      }
-      setSelectedSpeakLang("")
-      setSpeakLangOpen(false)
+      setSpeakLanguages((prev) => prev.filter((item) => item.code !== code))
     } else {
-      if (!learnLanguages.find((l) => l.code === langCode)) {
-        setLearnLanguages([...learnLanguages, lang])
-      }
-      setSelectedLearnLang("")
-      setLearnLangOpen(false)
+      setLearnLanguages((prev) => prev.filter((item) => item.code !== code))
     }
   }
 
-  const removeLanguage = (langCode: string, type: "speak" | "learn") => {
-    if (type === "speak") {
-      setSpeakLanguages((prev) => prev.filter((l) => l.code !== langCode))
-    } else {
-      setLearnLanguages((prev) => prev.filter((l) => l.code !== langCode))
+  const requestLocation = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setLocationStatus("denied")
+      setLocationMessage("Location services aren’t available in this browser. Try switching browsers or enabling them in your settings.")
+      return
     }
+
+    setLocationStatus("loading")
+    setLocationMessage("Requesting your location…")
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords
+        const coords = {
+          latitude: Number(latitude.toFixed(6)),
+          longitude: Number(longitude.toFixed(6)),
+        }
+        setLocationCoords(coords)
+        setLocationStatus("granted")
+        setLocationMessage("Location enabled! We’ll show partners near you in Den Haag.")
+        try {
+          localStorage.setItem("signup_location", JSON.stringify(coords))
+        } catch (error) {
+          console.warn("[SignupFlow] Failed to persist signup_location:", error)
+        }
+      },
+      (geoError) => {
+        console.warn("[SignupFlow] Geolocation error:", geoError)
+        setLocationStatus("denied")
+        setLocationCoords(null)
+        if (geoError.code === geoError.PERMISSION_DENIED) {
+          setLocationMessage("We couldn’t access your location. Please allow location sharing in your browser to continue.")
+        } else {
+          setLocationMessage("We couldn’t determine your location just yet. Try again or adjust your browser settings.")
+        }
+        try {
+          localStorage.removeItem("signup_location")
+        } catch {}
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 0,
+      },
+    )
   }
 
   const handleNext = async () => {
-    if (step < 7) {
-      setStep(step + 1)
+    if (step < TOTAL_STEPS) {
+      setStep((prev) => prev + 1)
       setError(null)
-    } else {
-      setIsLoading(true)
-      setError(null)
+      return
+    }
 
-      try {
-        const supabase = createClient()
+    setIsLoading(true)
+    setError(null)
+    setShowSuccess(false)
+    setSuccessMessage(null)
 
-        console.log("[v0] Starting signup process...")
-
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
-            data: {
-              full_name: name,
-            },
+    try {
+      const supabase = createClient()
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || window.location.origin,
+          data: {
+            full_name: name,
           },
-        })
+        },
+      })
 
-        if (authError) throw authError
-        if (!authData.user) throw new Error("Failed to create user")
+      if (signUpError) throw signUpError
+      if (!data.user) throw new Error("Failed to create account")
 
-        console.log("[v0] User created:", authData.user.id)
-        console.log("[v0] Session from signup:", !!authData.session)
+      let { session } = data
+      if (!session) {
+        await new Promise((resolve) => setTimeout(resolve, 1400))
+        const { data: sessionData } = await supabase.auth.getSession()
+        session = sessionData.session
+      }
 
-        // Check if we have a session immediately from signup
-        let session = authData.session
-
-        // If no session from signup, wait and check again (for email confirmation flow)
-        if (!session) {
-          console.log("[v0] No immediate session, waiting for session establishment...")
-          await new Promise((resolve) => setTimeout(resolve, 1500))
-
-          const { data: sessionData } = await supabase.auth.getSession()
-          session = sessionData.session
-          console.log("[v0] Session after wait:", !!session)
-        }
-
-        // If still no session, it means email confirmation is required
-        if (!session) {
-          console.log("[v0] Email confirmation required")
-          // Store user data locally for when they confirm their email
-          localStorage.setItem(
-            "pending_user_profile",
-            JSON.stringify({
-              id: authData.user.id,
-              name,
-              email,
-              photo,
-              speakLanguages,
-              learnLanguages,
-            }),
-          )
-
-          // Show success message and complete onboarding
-          setError(
-            "Please check your email to confirm your account. You can continue exploring the app in the meantime.",
-          )
-          await new Promise((resolve) => setTimeout(resolve, 3000))
-
-          localStorage.setItem("onboarding_completed", "true")
-          onComplete()
-          return
-        }
-
-        console.log("[v0] Session established, creating profile...")
-
-        // Try to update existing profile first (created by trigger)
-        const { error: profileError } = await supabase
-          .from("users")
-          .update({
-            full_name: name,
-            avatar_url: photo,
-            languages_speak: speakLanguages.map((lang) => lang.code),
-            languages_learn: learnLanguages.map((lang) => lang.code),
-            is_available: true,
-          })
-          .eq("id", authData.user.id)
-
-        // If update fails, try to insert
-        if (profileError) {
-          console.log("[v0] Profile update failed, attempting insert:", profileError.message)
-          const { error: insertError } = await supabase.from("users").insert({
-            id: authData.user.id,
-            email: email,
-            full_name: name,
-            avatar_url: photo,
-            languages_speak: speakLanguages.map((lang) => lang.code),
-            languages_learn: learnLanguages.map((lang) => lang.code),
-            bio: "",
-            is_available: true,
-            latitude: null,
-            longitude: null,
-            city: null,
-          })
-
-          if (insertError) {
-            console.error("[v0] Profile insert error:", insertError)
-            // Don't throw error here - profile might already exist from trigger
-            console.log("[v0] Continuing despite profile error...")
-          }
-        }
-
-        console.log("[v0] Profile created/updated successfully")
-
-        // Store user data in localStorage
+      if (!session) {
         localStorage.setItem(
-          "user_profile",
+          "pending_user_profile",
           JSON.stringify({
-            id: authData.user.id,
+            id: data.user.id,
             name,
             email,
             photo,
             speakLanguages,
             learnLanguages,
+            location: locationCoords,
           }),
         )
         localStorage.setItem("onboarding_completed", "true")
-        localStorage.setItem("user_id", authData.user.id)
-
-        console.log("[v0] Signup complete, redirecting...")
-
-        onComplete()
-      } catch (err: any) {
-        console.error("[v0] Signup error:", err)
-        setError(err.message || "Failed to create account. Please try again.")
-        setIsLoading(false)
+        setSuccessMessage("Check your email to activate your account. Taking you to the status screen…")
+        setShowSuccess(true)
+        setTimeout(() => {
+          onComplete()
+        }, 2000)
+        return
       }
+
+      const profilePayload = {
+        full_name: name,
+        avatar_url: photo,
+        languages_speak: speakLanguages.map((item) => item.code),
+        languages_learn: learnLanguages.map((item) => item.code),
+        is_available: true,
+        latitude: locationCoords?.latitude ?? null,
+        longitude: locationCoords?.longitude ?? null,
+      }
+
+      const { error: updateError } = await supabase.from("users").update(profilePayload).eq("id", data.user.id)
+
+      if (updateError) {
+        await supabase.from("users").insert({
+          id: data.user.id,
+          email,
+          ...profilePayload,
+          bio: "",
+          latitude: null,
+          longitude: null,
+          city: null,
+        })
+      }
+
+      localStorage.setItem(
+        "user_profile",
+        JSON.stringify({
+          id: data.user.id,
+          name,
+          email,
+          photo,
+          speakLanguages,
+          learnLanguages,
+        }),
+      )
+      localStorage.setItem("onboarding_completed", "true")
+      localStorage.setItem("user_id", data.user.id)
+
+      setSuccessMessage("Your account is ready! Redirecting you to your map…")
+      setShowSuccess(true)
+      setTimeout(() => {
+        onComplete()
+      }, 1500)
+    } catch (err: any) {
+      setError(err.message || "Failed to create account. Please try again.")
+      setIsLoading(false)
+      setShowSuccess(false)
+      setSuccessMessage(null)
     }
   }
 
   const handleBack = () => {
-    if (step > 1) {
-      setStep(step - 1)
-    } else {
+    if (step === 1) {
       router.back()
+      return
     }
+    setStep((prev) => Math.max(1, prev - 1))
   }
 
   const canProceed = () => {
     switch (step) {
       case 1:
-        return name.length > 0
+        return name.trim().length > 0 && isValidEmail(email) && isStrongPassword(password)
       case 2:
-        return isValidEmail(email) && isStrongPassword(password)
+        return speakLanguages.length > 0 || learnLanguages.length > 0
       case 3:
-        return speakLanguages.length > 0
-      case 4:
-        return learnLanguages.length > 0
-      case 5:
-        return proficiencyLevel.length > 0
-      case 6:
-        return true
-      case 7:
-        return true
+        return locationStatus === "granted" && !!locationCoords
       default:
-        return false
+        return true
     }
   }
 
-  const totalSteps = 7
-  const progressPercentage = (step / totalSteps) * 100
+  const progressPercentage = ((step - 1) / (TOTAL_STEPS - 1 || 1)) * 100
+  const activeStepMeta = useMemo(() => STEP_META[step - 1], [step])
+  const nextStepLabel =
+    step === TOTAL_STEPS ? "Ready to launch" : STEP_META[Math.min(step, STEP_META.length - 1)].label
+
+  if (showSuccess && successMessage) {
+    return (
+      <div className="relative min-h-screen overflow-hidden bg-[#050618] text-white">
+        <BackgroundGlow />
+        <div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-10 sm:px-10">
+          <div className="w-full max-w-md rounded-[32px] border border-white/12 bg-white/10 p-8 text-center shadow-[0_45px_120px_rgba(8,11,34,0.55)] backdrop-blur-[32px]">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/15">
+              <Sparkles className="h-10 w-10 text-white" />
+            </div>
+            <h1 className="mt-6 text-3xl font-semibold text-white">All set!</h1>
+            <p className="mt-3 text-base text-white/75">{successMessage}</p>
+            <p className="mt-10 text-sm text-white/50">Hang tight—this will only take a moment.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="fixed inset-0 z-50 bg-gradient-to-br from-[#667eea] via-[#764ba2] to-[#667eea]">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 sm:p-6 safe-area-inset">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleBack}
-          className="rounded-full h-11 w-11 text-white hover:bg-white/20"
-        >
-          <ChevronLeft className="h-6 w-6" />
-        </Button>
-        <div className="flex-1 mx-4 h-2 bg-white/20 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-white rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${progressPercentage}%` }}
-          />
-        </div>
-        <div className="w-11 text-white text-sm font-semibold">
-          {step}/{totalSteps}
-        </div>
-      </div>
+    <div className="relative min-h-screen overflow-hidden bg-[#050618] text-white">
+      <BackgroundGlow />
 
-      {/* Content */}
-      <div className="flex flex-col h-[calc(100vh-88px)] sm:h-[calc(100vh-104px)] overflow-y-auto px-4 sm:px-6 pb-6 overscroll-contain">
-        <div className="flex-1 flex flex-col justify-start max-w-md mx-auto w-full py-4 sm:py-8 min-h-0">
-          {/* Step 1: Name and Photo */}
-          {step === 1 && (
-            <div className="space-y-6 sm:space-y-8 animate-slide-up">
-              <div className="text-center space-y-2">
-                <div className="text-6xl mb-4 animate-float">👋</div>
-                <h1 className="text-3xl sm:text-4xl font-bold text-white text-balance">What's your name?</h1>
-                <p className="text-base sm:text-lg text-white/80">Let's get to know you</p>
-              </div>
+      <div className="relative z-10 mx-auto flex min-h-screen w-full flex-col items-center px-5 py-8 sm:px-8 lg:px-12">
+        <header className="flex w-full max-w-4xl items-center justify-between">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleBack}
+            className="h-11 w-11 rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/20"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
 
-              <div className="flex flex-col items-center gap-6">
-                <div className="relative">
-                  <Avatar className="h-28 w-28 sm:h-32 sm:w-32 border-4 border-white shadow-2xl">
-                    {photo ? (
-                      <AvatarImage src={photo || "/placeholder.svg"} alt="Profile" />
-                    ) : (
-                      <AvatarFallback className="bg-white text-[#667eea] text-3xl sm:text-4xl font-bold">
-                        {name.charAt(0).toUpperCase() || "?"}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  <label
-                    htmlFor="photo-upload"
-                    className="absolute bottom-0 right-0 bg-white text-[#667eea] p-2.5 sm:p-3 rounded-full shadow-lg cursor-pointer hover:bg-gray-50 transition-colors active:scale-95"
-                  >
-                    <Upload className="h-5 w-5" />
-                  </label>
-                  <input
-                    id="photo-upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handlePhotoUpload}
-                  />
-                </div>
-
-                <div className="w-full space-y-2">
-                  <Label htmlFor="name" className="text-base sm:text-lg font-semibold text-white">
-                    Your Name
-                  </Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="Enter your name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="h-12 sm:h-14 text-base sm:text-lg rounded-2xl border-2 border-white/30 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-4 focus:ring-white/20 transition-all backdrop-blur-sm"
-                  />
-                </div>
-              </div>
+          <div className="flex w-full flex-1 items-center gap-3 px-6">
+            <div className="h-[5px] flex-1 rounded-full bg-white/12">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#8b5cf6] via-[#6366f1] to-[#3b82f6]"
+                style={{ width: `${progressPercentage}%` }}
+              />
             </div>
-          )}
+            <span className="text-xs font-semibold text-white/70">
+              {step}/{TOTAL_STEPS}
+            </span>
+          </div>
+        </header>
 
-          {/* Step 2: Email and Password */}
-          {step === 2 && (
-            <div className="space-y-6 sm:space-y-8 animate-slide-up">
-              <div className="text-center space-y-2">
-                <div className="text-6xl mb-4 animate-float">📧</div>
-                <h1 className="text-3xl sm:text-4xl font-bold text-white text-balance">Create your account</h1>
-                <p className="text-base sm:text-lg text-white/80">We'll keep your information secure</p>
-              </div>
-
-              <div className="space-y-5 sm:space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-base sm:text-lg font-semibold text-white">
-                    Email
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    onBlur={() => setEmailTouched(true)}
-                    className="h-12 sm:h-14 text-base sm:text-lg rounded-2xl border-2 border-white/30 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-4 focus:ring-white/20 transition-all backdrop-blur-sm"
-                  />
-                  {emailTouched && !isValidEmail(email) && (
-                    <p className="text-sm text-red-200">Please enter a valid email address</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-base sm:text-lg font-semibold text-white">
-                    Password
-                  </Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="At least 6 characters"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onBlur={() => setPasswordTouched(true)}
-                    className="h-12 sm:h-14 text-base sm:text-lg rounded-2xl border-2 border-white/30 bg-white/10 text-white placeholder:text-white/50 focus:border-white focus:ring-4 focus:ring-white/20 transition-all backdrop-blur-sm"
-                  />
-                  {!passwordTouched || isStrongPassword(password) ? (
-                    <p className="text-sm text-white/70">Use at least 8 characters with letters and numbers</p>
-                  ) : (
-                    <p className="text-sm text-red-200">Password must be 8+ characters and include letters and numbers</p>
-                  )}
-                </div>
-              </div>
+        <main className="mt-10 flex w-full max-w-4xl flex-1 flex-col gap-8 rounded-[32px] border border-white/12 bg-white/8 px-6 py-8 shadow-[0_45px_120px_rgba(8,11,34,0.55)] backdrop-blur-[32px] sm:px-10 lg:flex-row lg:items-start lg:gap-12">
+          <aside className="lg:w-72">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm text-white/75">
+              <Sparkles className="h-4 w-4" />
+              Step {step} · {activeStepMeta.label}
             </div>
-          )}
+            <h1 className="mt-4 text-3xl font-semibold leading-tight">{activeStepMeta.title}</h1>
+            <p className="mt-3 text-sm text-white/70">{activeStepMeta.description}</p>
 
-          {/* Step 3: Languages I Speak */}
-          {step === 3 && (
-            <div className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-4 duration-500">
-              <div className="text-center space-y-3">
-                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-purple-500/20 to-violet-500/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20">
-                  <Globe className="w-8 h-8 text-white" />
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white">Languages You Speak</h2>
-                <p className="text-white/80 text-base sm:text-lg">Select all the languages you can communicate in</p>
-              </div>
-
-              <div className="space-y-4">
-                <Popover open={speakLangOpen} onOpenChange={setSpeakLangOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={speakLangOpen}
-                      className="h-14 w-full justify-between text-base rounded-2xl border-2 border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 hover:text-white transition-all"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Search className="w-4 h-4 opacity-70" />
-                        Search languages...
-                      </span>
-                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search languages..." className="h-12" />
-                      <CommandList>
-                        <CommandEmpty>No language found.</CommandEmpty>
-                        <CommandGroup>
-                          {LANGUAGES.map((lang) => (
-                            <CommandItem
-                              key={lang.code}
-                              value={lang.name}
-                              onSelect={() => addLanguage(lang.code, "speak")}
-                              className="flex items-center gap-3 px-4 py-3 cursor-pointer"
-                            >
-                              <span className="text-2xl">{lang.flag}</span>
-                              <span className="flex-1">{lang.name}</span>
-                              {speakLanguages.find((l) => l.code === lang.code) && (
-                                <Check className="w-4 h-4 text-purple-600" />
-                              )}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-
-                {/* Selected Languages */}
-                {speakLanguages.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {speakLanguages.map((lang) => (
-                      <div
-                        key={lang.code}
-                        className="group flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 backdrop-blur-sm border border-white/30 rounded-full text-white hover:from-purple-500/30 hover:to-violet-500/30 transition-all"
-                      >
-                        <span className="text-xl">{lang.flag}</span>
-                        <span className="font-medium">{lang.name}</span>
-                        <button
-                          onClick={() => removeLanguage(lang.code, "speak")}
-                          className="ml-1 hover:bg-white/20 rounded-full p-1 transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Languages I Want to Learn */}
-          {step === 4 && (
-            <div className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-4 duration-500">
-              <div className="text-center space-y-3">
-                <div className="w-16 h-16 mx-auto bg-gradient-to-br from-purple-500/20 to-violet-500/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20">
-                  <Sparkles className="w-8 h-8 text-white" />
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white">Languages to Learn</h2>
-                <p className="text-white/80 text-base sm:text-lg">Which languages would you like to practice?</p>
-              </div>
-
-              <div className="space-y-4">
-                <Popover open={learnLangOpen} onOpenChange={setLearnLangOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={learnLangOpen}
-                      className="h-14 w-full justify-between text-base rounded-2xl border-2 border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 hover:text-white transition-all"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Search className="w-4 h-4 opacity-70" />
-                        Search languages...
-                      </span>
-                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search languages..." className="h-12" />
-                      <CommandList>
-                        <CommandEmpty>No language found.</CommandEmpty>
-                        <CommandGroup>
-                          {LANGUAGES.map((lang) => (
-                            <CommandItem
-                              key={lang.code}
-                              value={lang.name}
-                              onSelect={() => addLanguage(lang.code, "learn")}
-                              className="flex items-center gap-3 px-4 py-3 cursor-pointer"
-                            >
-                              <span className="text-2xl">{lang.flag}</span>
-                              <span className="flex-1">{lang.name}</span>
-                              {learnLanguages.find((l) => l.code === lang.code) && (
-                                <Check className="w-4 h-4 text-purple-600" />
-                              )}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-
-                {/* Selected Languages */}
-                {learnLanguages.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {learnLanguages.map((lang) => (
-                      <div
-                        key={lang.code}
-                        className="group flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/20 to-violet-500/20 backdrop-blur-sm border border-white/30 rounded-full text-white hover:from-purple-500/30 hover:to-violet-500/30 transition-all"
-                      >
-                        <span className="text-xl">{lang.flag}</span>
-                        <span className="font-medium">{lang.name}</span>
-                        <button
-                          onClick={() => removeLanguage(lang.code, "learn")}
-                          className="ml-1 hover:bg-white/20 rounded-full p-1 transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {step === 5 && (
-            <div className="space-y-5 sm:space-y-6 animate-slide-up">
-              <div className="text-center space-y-2">
-                <div className="text-6xl mb-4 animate-float">🎯</div>
-                <h1 className="text-3xl sm:text-4xl font-bold text-white text-balance">
-                  Your {learnLanguages[0]?.name} Level?
-                </h1>
-                <p className="text-base sm:text-lg text-white/80">This helps us find the right partners</p>
-              </div>
-
-              <div className="space-y-3">
-                {PROFICIENCY_LEVELS.map((level) => (
-                  <button
-                    key={level.id}
-                    onClick={() => setProficiencyLevel(level.id)}
-                    className={`w-full p-4 rounded-2xl border-2 transition-all backdrop-blur-sm ${
-                      proficiencyLevel === level.id
-                        ? "bg-white/30 border-white shadow-lg scale-105"
-                        : "bg-white/10 border-white/30 hover:bg-white/20"
+            <div className="mt-10 space-y-3">
+              {STEP_META.map((meta) => {
+                const isActive = meta.id === step
+                const isDone = meta.id < step
+                return (
+                  <div
+                    key={meta.id}
+                    className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition ${
+                      isActive
+                        ? "border-white/70 bg-white/15 text-white"
+                        : isDone
+                          ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-100"
+                          : "border-white/10 bg-white/5 text-white/55"
                     }`}
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="text-4xl">{level.emoji}</div>
-                      <div className="flex-1 text-left">
-                        <h3 className="font-bold text-white">{level.title}</h3>
-                        <p className="text-sm text-white/80">{level.description}</p>
-                      </div>
-                      {proficiencyLevel === level.id && <Check className="h-6 w-6 text-white" />}
-                    </div>
-                  </button>
-                ))}
-              </div>
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
+                        isActive
+                          ? "bg-white text-slate-900"
+                          : isDone
+                            ? "bg-emerald-400 text-slate-900"
+                            : "bg-white/10 text-white/60"
+                      }`}
+                    >
+                      {isDone ? <Check className="h-4 w-4" /> : meta.id}
+                    </span>
+                    {meta.label}
+                  </div>
+                )
+              })}
             </div>
-          )}
+          </aside>
 
-          {step === 6 && (
-            <div className="space-y-6 sm:space-y-8 animate-slide-up">
-              <div className="text-center space-y-4">
-                <div className="mx-auto w-32 h-32 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center animate-pulse-ring">
-                  <MapPin className="h-16 w-16 text-white" />
-                </div>
-                <h1 className="text-3xl sm:text-4xl font-bold text-white text-balance">Enable Location</h1>
-                <p className="text-base sm:text-lg text-white/80">
-                  Find language partners near you and practice in person or online
-                </p>
-              </div>
+          <section className="flex flex-1 flex-col gap-6">
+            {step === 1 && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+                  <div className="relative">
+                    <Avatar className="h-28 w-28 border-4 border-white/25 shadow-[0_25px_70px_rgba(76,81,205,0.45)]">
+                      {photo ? (
+                        <AvatarImage src={photo || "/placeholder.svg"} alt="Profile" />
+                      ) : (
+                        <AvatarFallback className="bg-gradient-to-br from-[#8b5cf6] to-[#3b82f6] text-3xl font-semibold text-white">
+                          {name.charAt(0).toUpperCase() || "?"}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    <label
+                      htmlFor="photo-upload"
+                      className="absolute -bottom-2 right-3 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/25 bg-white text-[#4338ca] shadow-xl transition hover:scale-105 hover:bg-slate-50 active:scale-95"
+                    >
+                      <Upload className="h-5 w-5" />
+                    </label>
+                    <input id="photo-upload" type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                  </div>
 
-              <div className="space-y-4">
-                {[
-                  { emoji: "🗺️", title: "Discover Nearby", desc: "See partners within walking distance" },
-                  { emoji: "☕", title: "Meet in Person", desc: "Find coffee shops and meetup spots" },
-                  { emoji: "🔒", title: "Private & Secure", desc: "Your exact location is never shared" },
-                ].map((benefit, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-4 p-4 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/30"
-                  >
-                    <div className="text-3xl">{benefit.emoji}</div>
-                    <div>
-                      <h3 className="font-bold text-white">{benefit.title}</h3>
-                      <p className="text-sm text-white/80">{benefit.desc}</p>
+                  <div className="w-full space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="name" className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">
+                        Name
+                      </Label>
+                      <Input
+                        id="name"
+                        type="text"
+                        placeholder="Jane Doe"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        className="h-14 rounded-2xl border border-white/15 bg-black/10 px-5 text-base text-white placeholder:text-white/40 focus:border-[#7c3aed]/70 focus:ring-4 focus:ring-[#7c3aed]/30"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">
+                        Email
+                      </Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="you@email.com"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        onBlur={() => setEmailTouched(true)}
+                        className="h-14 rounded-2xl border border-white/15 bg-black/10 px-5 text-base text-white placeholder:text-white/40 focus:border-[#7c3aed]/70 focus:ring-4 focus:ring-[#7c3aed]/30"
+                      />
+                      {emailTouched && !isValidEmail(email) && (
+                        <p className="text-sm text-rose-200/90">Please enter a valid email address.</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">
+                        Password
+                      </Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="At least 6 characters with letters and numbers"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        onBlur={() => setPasswordTouched(true)}
+                        className="h-14 rounded-2xl border border-white/15 bg-black/10 px-5 text-base text-white placeholder:text-white/40 focus:border-[#7c3aed]/70 focus:ring-4 focus:ring-[#7c3aed]/30"
+                      />
+                      <p className="text-sm text-white/55">
+                        {passwordTouched && !isStrongPassword(password)
+                          ? "Try a mix of letters and numbers with at least 6 characters."
+                          : "You can update this later from your profile settings."}
+                      </p>
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
+            )}
 
-              <div className="text-center">
-                <Button
-                  onClick={() => {
-                    setLocationEnabled(true)
-                    if (navigator.geolocation) {
-                      navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                          console.log("[v0] Location enabled:", position.coords)
-                          try {
-                            localStorage.setItem(
-                              "signup_location",
-                              JSON.stringify({
-                                latitude: position.coords.latitude,
-                                longitude: position.coords.longitude,
-                                accuracy: position.coords.accuracy,
-                              }),
-                            )
-                          } catch {}
-                          setStep(7)
-                        },
-                        (error) => {
-                          console.log("[v0] Location denied:", error)
-                        },
-                      )
-                    }
-                  }}
-                  className="w-full h-12 sm:h-14 text-base sm:text-lg rounded-full bg-white text-[#667eea] hover:bg-gray-50 font-bold shadow-xl"
-                >
-                  Enable Location
-                </Button>
-                <button
-                  onClick={() => setStep(7)}
-                  className="mt-3 text-white/80 hover:text-white text-sm font-medium transition-colors"
-                >
-                  Skip for now
-                </button>
+            {step === 2 && (
+              <div className="space-y-8 animate-fade-in">
+                <LanguagePicker
+                  title="Languages you speak"
+                  description="Let others know what you can help them with."
+                  placeholder="Search languages..."
+                  open={speakOpen}
+                  setOpen={setSpeakOpen}
+                  selected={speakLanguages}
+                  onAdd={(code) => addLanguage(code, "speak")}
+                  onRemove={(code) => removeLanguage(code, "speak")}
+                  emptyLabel="Add at least one language to teach or support."
+                />
+
+                <LanguagePicker
+                  title="Languages you’re learning"
+                  description="Pick everything you’re excited to practise."
+                  placeholder="Search languages..."
+                  open={learnOpen}
+                  setOpen={setLearnOpen}
+                  selected={learnLanguages}
+                  onAdd={(code) => addLanguage(code, "learn")}
+                  onRemove={(code) => removeLanguage(code, "learn")}
+                  emptyLabel="Optional, but helps us tailor recommendations."
+                />
               </div>
-            </div>
-          )}
+            )}
 
-          {step === 7 && (
-            <div className="space-y-6 sm:space-y-8 animate-slide-up text-center">
-              <div className="space-y-4">
-                <div className="text-8xl mb-4 animate-bounce-slow">🎉</div>
-                <h1 className="text-4xl sm:text-5xl font-bold text-white text-balance">You're All Set!</h1>
-                <p className="text-lg sm:text-xl text-white/80">
-                  Your profile is ready. Let's find your first language partner!
+            {step === 3 && (
+              <div className="space-y-8 animate-fade-in">
+                <div className="rounded-3xl border border-white/12 bg-white/10 p-6">
+                  <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
+                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-white/15 text-white">
+                      <MapPin className="h-6 w-6" />
+                    </div>
+                    <div className="space-y-3 text-left">
+                      <h3 className="text-xl font-semibold text-white">Unlock nearby partners</h3>
+                      <p className="text-sm leading-relaxed text-white/70">
+                        We use your device location to surface people who are practising languages around Den Haag, suggest pop-up meetups,
+                        and give your exchanges a head start. You can switch this off later in settings.
+                      </p>
+                      <ul className="space-y-2 text-sm text-white/70">
+                        <li>• See who’s practising within walking distance.</li>
+                        <li>• Get alerts about Dutch Language Café meetups nearby.</li>
+                        <li>• Control your visibility at any time.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-white/12 bg-white/5 p-6">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-base font-semibold text-white">
+                        {locationStatus === "granted" ? "Location enabled" : "Share your live location"}
+                      </p>
+                      <p className="mt-1 text-sm text-white/65">
+                        {locationStatus === "granted"
+                          ? "Great! We’ll match you with partners closest to you."
+                          : "Tap the button to allow location access. We only use it to help you connect faster."}
+                      </p>
+                      {locationCoords && (
+                        <p className="mt-2 text-xs uppercase tracking-[0.25em] text-white/40">
+                          {locationCoords.latitude.toFixed(4)}° N · {locationCoords.longitude.toFixed(4)}° E
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      onClick={requestLocation}
+                      disabled={locationStatus === "loading"}
+                      className="group inline-flex h-12 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/90 px-6 text-sm font-semibold text-slate-900 transition hover:bg-white"
+                    >
+                      {locationStatus === "loading" ? (
+                        "Requesting..."
+                      ) : locationStatus === "granted" ? (
+                        <>
+                          Location added
+                          <Check className="h-4 w-4 text-emerald-600 group-hover:translate-x-0.5" />
+                        </>
+                      ) : (
+                        <>
+                          Enable location
+                          <LocateFixed className="h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {locationMessage && (
+                    <div
+                      className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+                        locationStatus === "denied"
+                          ? "border-rose-400/40 bg-rose-500/12 text-rose-100"
+                          : "border-emerald-400/40 bg-emerald-500/15 text-emerald-50"
+                      }`}
+                    >
+                      {locationMessage}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {step === 4 && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="rounded-3xl border border-white/15 bg-white/10 p-6">
+                  <h3 className="text-lg font-semibold text-white">Account snapshot</h3>
+                  <div className="mt-4 space-y-2 text-sm text-white/75">
+                    <div className="flex items-center gap-2">
+                      <span className="text-white/40">Name:</span>
+                      <span>{name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-white/40">Email:</span>
+                      <span>{email}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-white/40">Location sharing:</span>
+                      <span>{locationStatus === "granted" ? "Enabled" : "Pending"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SummaryCard title="You speak" items={speakLanguages} placeholder="Add a language in the previous step." />
+                  <SummaryCard title="You’re learning" items={learnLanguages} placeholder="Set this anytime later." />
+                </div>
+
+                <p className="text-sm text-white/65">
+                  When you finish, we’ll set up your space and suggest partners that fit your goals. You can tweak your
+                  preferences, languages, and location sharing any time from the dashboard.
                 </p>
               </div>
-
-              <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
-                <div className="p-6 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30">
-                  <div className="text-4xl font-bold text-white mb-1">127</div>
-                  <div className="text-sm text-white/80">Nearby Partners</div>
-                </div>
-                <div className="p-6 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30">
-                  <div className="text-4xl font-bold text-white mb-1">8</div>
-                  <div className="text-sm text-white/80">Languages Available</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-500/20 border-2 border-red-300/50 rounded-2xl p-4 mb-4 backdrop-blur-sm">
-              <p className="text-white text-sm font-medium">{error}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Continue Button */}
-        <div className="sticky bottom-0 left-0 right-0 bg-gradient-to-t from-[#667eea] via-[#764ba2]/50 to-transparent pt-6 pb-safe -mx-4 px-4 sm:-mx-6 sm:px-6 mt-auto">
-          <Button
-            onClick={handleNext}
-            disabled={!canProceed() || isLoading}
-            size="lg"
-            className="w-full h-14 sm:h-16 text-base sm:text-lg rounded-full shadow-xl bg-white text-[#667eea] hover:bg-gray-50 disabled:opacity-50 active:scale-95 transition-transform font-bold touch-manipulation"
-          >
-            {isLoading ? (
-              "Creating account..."
-            ) : step === 7 ? (
-              <>
-                Start Exploring
-                <ChevronRight className="ml-2 h-5 w-5" />
-              </>
-            ) : (
-              <>
-                Continue
-                <ChevronRight className="ml-2 h-5 w-5" />
-              </>
             )}
-          </Button>
-        </div>
+
+            {error && (
+              <div className="rounded-2xl border border-rose-400/40 bg-rose-500/12 px-4 py-3 text-sm text-rose-100">
+                {error}
+              </div>
+            )}
+          </section>
+        </main>
+
+        <footer className="mt-8 flex w-full max-w-4xl flex-col gap-4 rounded-[26px] border border-white/12 bg-white/8 px-6 py-5 backdrop-blur-[28px] sm:flex-row sm:items-center sm:justify-between sm:px-10">
+          <p className="text-xs uppercase tracking-[0.35em] text-white/45">{nextStepLabel}</p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button
+              variant="ghost"
+              onClick={handleBack}
+              className="h-12 rounded-full border border-white/12 bg-white/5 px-7 text-sm font-medium text-white hover:bg-white/15"
+            >
+              Back
+            </Button>
+            <Button
+              onClick={handleNext}
+              disabled={!canProceed() || isLoading}
+              className="group inline-flex h-12 items-center justify-center gap-2 rounded-full border-0 bg-gradient-to-r from-[#8b5cf6] via-[#6366f1] to-[#3b82f6] px-8 text-sm font-semibold text-white shadow-[0_20px_55px_rgba(59,130,246,0.35)] transition hover:shadow-[0_26px_80px_rgba(59,130,246,0.45)] disabled:cursor-not-allowed disabled:opacity-60 sm:px-10"
+            >
+              {isLoading ? (
+                "Creating account..."
+              ) : step === TOTAL_STEPS ? (
+                <>
+                  Dive in
+                  <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                </>
+              ) : (
+                <>
+                  Continue
+                  <ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                </>
+              )}
+            </Button>
+          </div>
+        </footer>
       </div>
+    </div>
+  )
+}
+
+function LanguagePicker({
+  title,
+  description,
+  placeholder,
+  open,
+  setOpen,
+  selected,
+  onAdd,
+  onRemove,
+  emptyLabel,
+}: {
+  title: string
+  description: string
+  placeholder: string
+  open: boolean
+  setOpen: (value: boolean) => void
+  selected: Language[]
+  onAdd: (code: string) => void
+  onRemove: (code: string) => void
+  emptyLabel: string
+}) {
+  return (
+    <div className="space-y-4 rounded-3xl border border-white/12 bg-white/8 p-6">
+      <div>
+        <h3 className="text-lg font-semibold text-white">{title}</h3>
+        <p className="mt-1 text-sm text-white/65">{description}</p>
+      </div>
+
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="h-12 w-full justify-between rounded-2xl border border-white/15 bg-black/10 px-4 text-sm text-white/80 hover:bg-white/10"
+          >
+            <span className="flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              {placeholder}
+            </span>
+            <ChevronDown className="h-4 w-4 opacity-60" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[min(380px,90vw)] overflow-hidden rounded-xl border border-white/10 bg-[#040720]/95 p-0 shadow-2xl backdrop-blur-xl">
+          <Command>
+            <CommandInput placeholder="Search languages..." className="border-b border-white/10" />
+            <CommandList className="max-h-64">
+              <CommandEmpty className="py-5 text-sm text-white/60">No language found.</CommandEmpty>
+              <CommandGroup>
+                {LANGUAGES.map((language) => (
+                  <CommandItem
+                    key={language.code}
+                    value={language.name}
+                    onSelect={() => onAdd(language.code)}
+                    className="flex items-center gap-4 px-5 py-3 text-white/85"
+                  >
+                    <span className="text-xl">{language.flag}</span>
+                    <span className="flex-1 text-sm">{language.name}</span>
+                    {selected.some((item) => item.code === language.code) && <Check className="h-4 w-4 text-emerald-400" />}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+
+      {selected.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {selected.map((language) => (
+            <div
+              key={language.code}
+              className="group inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs text-white transition hover:border-white/30 hover:bg-white/15"
+            >
+              <span className="text-lg">{language.flag}</span>
+              <span className="font-medium">{language.name}</span>
+              <button
+                onClick={() => onRemove(language.code)}
+                className="rounded-full bg-white/0 p-1 text-white/60 transition group-hover:bg-white/15 group-hover:text-white"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-white/55">{emptyLabel}</p>
+      )}
+    </div>
+  )
+}
+
+function SummaryCard({
+  title,
+  items,
+  placeholder,
+}: {
+  title: string
+  items: Language[]
+  placeholder: string
+}) {
+  return (
+    <div className="rounded-3xl border border-white/12 bg-white/8 p-6">
+      <h4 className="text-base font-semibold text-white">{title}</h4>
+      {items.length > 0 ? (
+        <div className="mt-4 space-y-2 text-sm text-white/75">
+          {items.map((language) => (
+            <div key={language.code} className="flex items-center gap-3">
+              <span className="text-lg">{language.flag}</span>
+              <span>{language.name}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-white/55">{placeholder}</p>
+      )}
+    </div>
+  )
+}
+
+function BackgroundGlow() {
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      <div className="absolute -top-44 -left-32 h-96 w-96 rounded-full bg-[#6366f1]/45 blur-[170px]" />
+      <div className="absolute top-[22%] right-[-140px] h-80 w-80 rounded-full bg-[#ec4899]/35 blur-[150px]" />
+      <div className="absolute bottom-[-160px] left-[18%] h-[420px] w-[420px] rounded-full bg-[#0ea5e9]/25 blur-[180px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_5%_0%,rgba(129,140,248,0.18),transparent_55%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_95%_0%,rgba(244,114,182,0.14),transparent_55%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(15,23,42,0.65)_0%,rgba(3,5,24,0.92)_60%)]" />
     </div>
   )
 }

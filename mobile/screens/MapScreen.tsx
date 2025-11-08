@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Image, Dimensions, Modal, Animated, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -242,6 +242,102 @@ const formatDistanceLabel = (distanceKm: number): string => {
   }
 
   return `${distanceKm.toFixed(1)}km`
+}
+
+type ClusterRenderable =
+  | {
+      type: 'cluster'
+      id: string
+      latitude: number
+      longitude: number
+      users: User[]
+    }
+  | {
+      type: 'user'
+      user: User
+    }
+
+const getClusterRadiusForZoom = (zoom: number) => {
+  if (zoom >= 16) return 0.08
+  if (zoom >= 14) return 0.18
+  if (zoom >= 12) return 0.45
+  if (zoom >= 10) return 1.2
+  return 2.5
+}
+
+const clusterUsersByZoom = (users: User[], zoom: number): ClusterRenderable[] => {
+  if (users.length === 0) return []
+  const thresholdKm = getClusterRadiusForZoom(zoom)
+  if (thresholdKm <= 0) {
+    return users.map((user) => ({ type: 'user', user }))
+  }
+
+  const clusters: Array<{ latitude: number; longitude: number; users: User[] }> = []
+
+  users.forEach((user) => {
+    const existingCluster = clusters.find((cluster) => {
+      const distance = calculateDistance(cluster.latitude, cluster.longitude, user.lat, user.lng)
+      return distance <= thresholdKm
+    })
+
+    if (existingCluster) {
+      existingCluster.users.push(user)
+      const total = existingCluster.users.length
+      existingCluster.latitude =
+        (existingCluster.latitude * (total - 1) + user.lat) / total
+      existingCluster.longitude =
+        (existingCluster.longitude * (total - 1) + user.lng) / total
+    } else {
+      clusters.push({
+        latitude: user.lat,
+        longitude: user.lng,
+        users: [user],
+      })
+    }
+  })
+
+  return clusters.flatMap((cluster) => {
+    if (cluster.users.length === 1) {
+      return {
+        type: 'user' as const,
+        user: cluster.users[0],
+      }
+    }
+    const clusterId = cluster.users
+      .map((u) => u.id)
+      .sort()
+      .join('-')
+
+    return {
+      type: 'cluster' as const,
+      id: `cluster-${clusterId}`,
+      latitude: cluster.latitude,
+      longitude: cluster.longitude,
+      users: cluster.users,
+    }
+  })
+}
+
+const resolveClusterRegion = (clusterUsers: User[]) => {
+  const lats = clusterUsers.map((user) => user.lat)
+  const lngs = clusterUsers.map((user) => user.lng)
+
+  const minLat = Math.min(...lats)
+  const maxLat = Math.max(...lats)
+  const minLng = Math.min(...lngs)
+  const maxLng = Math.max(...lngs)
+
+  const latitude = (minLat + maxLat) / 2
+  const longitude = (minLng + maxLng) / 2
+  const latitudeDelta = Math.max(maxLat - minLat, 0.05)
+  const longitudeDelta = Math.max(maxLng - minLng, 0.05)
+
+  return {
+    latitude,
+    longitude,
+    latitudeDelta,
+    longitudeDelta,
+  }
 }
 
 // Cafe users removed - now using only database users from Supabase
@@ -508,6 +604,7 @@ const generateNearbyUsers = (centerLat: number, centerLng: number): User[] => {
 
 export default function MapScreen() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [previewUser, setPreviewUser] = useState<User | null>(null)
   const [mapStyle, setMapStyle] = useState<'standard' | 'satellite'>('standard')
   const [staticMapUrl, setStaticMapUrl] = useState<string>('')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
@@ -520,6 +617,10 @@ export default function MapScreen() {
   const [canDismissProfileModal, setCanDismissProfileModal] = useState(false)
   const profileDismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [mapZoomLevel, setMapZoomLevel] = useState<number>(MARKER_META_ZOOM_THRESHOLD)
+  const [highlightedMarkerId, setHighlightedMarkerId] = useState<string | null>(null)
+  const mapRef = useRef<any>(null)
+  const previewCardTranslate = useSharedValue(200)
+  const previewCardOpacity = useSharedValue(0)
   
   // Animation values for buttons
   const filterButtonScale = useSharedValue(1)
@@ -613,7 +714,60 @@ export default function MapScreen() {
       })
   }, [allUsers, userLocation, filterDistance, filterAvailableNow, filterSkillLevel])
 
+  const mapRenderableItems = React.useMemo<ClusterRenderable[]>(() => {
+    return clusterUsersByZoom(availableUsers, mapZoomLevel)
+  }, [availableUsers, mapZoomLevel])
+
   const shouldShowMarkerDetails = mapZoomLevel >= MARKER_META_ZOOM_THRESHOLD
+  const previewCardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: previewCardTranslate.value }],
+    opacity: previewCardOpacity.value,
+  }))
+
+  const handleUserPreview = useCallback((user: User) => {
+    setPreviewUser(user)
+    setHighlightedMarkerId(user.id)
+  }, [])
+
+  const handleOpenProfile = useCallback((user: User) => {
+    setPreviewUser(null)
+    setSelectedUser(user)
+  }, [])
+
+  const handleClusterZoom = useCallback((cluster: Extract<ClusterRenderable, { type: 'cluster' }>) => {
+    if (cluster.users.length === 0) return
+    const region = resolveClusterRegion(cluster.users)
+    if (mapRef.current && typeof mapRef.current.animateToRegion === 'function') {
+      mapRef.current.animateToRegion(
+        {
+          ...region,
+          latitudeDelta: Math.max(region.latitudeDelta * 0.75, 0.02),
+          longitudeDelta: Math.max(region.longitudeDelta * 0.75, 0.02),
+        },
+        350
+      )
+    } else {
+      setMapRegion(region)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (previewUser) {
+      previewCardTranslate.value = withSpring(0, { damping: 18, stiffness: 160 })
+      previewCardOpacity.value = withTiming(1, { duration: 200 })
+    } else {
+      previewCardTranslate.value = withSpring(200, { damping: 22, stiffness: 180 })
+      previewCardOpacity.value = withTiming(0, { duration: 150 })
+    }
+  }, [previewUser, previewCardOpacity, previewCardTranslate])
+
+  useEffect(() => {
+    if (!highlightedMarkerId) return
+    const timeoutId = setTimeout(() => {
+      setHighlightedMarkerId(null)
+    }, 650)
+    return () => clearTimeout(timeoutId)
+  }, [highlightedMarkerId])
 
   // Animate nearby badge when count changes
   useEffect(() => {
@@ -795,19 +949,20 @@ export default function MapScreen() {
     const center = userLocation ? [userLocation.longitude, userLocation.latitude] : [4.3007, 52.0705]
     
     // Create markers for available users with profile info
-    const markers = availableUsers.map((user) => ({
-      coordinates: [user.lng, user.lat],
+    const markerPayload = availableUsers.map((user) => ({
+      id: user.id,
       name: user.name,
       flag: user.flag || '🌍',
       distance: user.distance,
       initial: user.name[0],
-      id: user.id,
+      lng: user.lng,
+      lat: user.lat,
       isFallback: user.isFallbackLocation,
       availableNow: user.availableNow,
     }))
     
     // Debug: Log marker count
-    console.log(`[MapScreen] Generating map with ${markers.length} user markers from database`)
+    console.log(`[MapScreen] Generating map with ${markerPayload.length} user markers from database`)
     
     // Prepare user data for template string
     const userName = currentUserData?.name || 'You'
@@ -841,19 +996,63 @@ export default function MapScreen() {
       position: relative;
       cursor: pointer;
     }
+    .cluster-marker {
+      background: linear-gradient(145deg, #38bdf8 0%, #22d3ee 100%);
+      width: 66px;
+      height: 66px;
+      border-radius: 33px;
+      border: 4px solid rgba(15, 23, 42, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 20px;
+      color: #0f172a;
+      box-shadow: 0 12px 28px rgba(56, 189, 248, 0.55);
+      cursor: pointer;
+      position: relative;
+    }
+    .cluster-marker::after {
+      content: '';
+      position: absolute;
+      inset: -14px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.25) 0%, rgba(56, 189, 248, 0) 70%);
+      pointer-events: none;
+      animation: clusterPulse 3s ease-in-out infinite;
+    }
+    @keyframes clusterPulse {
+      0% { transform: scale(0.85); opacity: 0.85; }
+      50% { transform: scale(1.05); opacity: 0.45; }
+      100% { transform: scale(0.85); opacity: 0.85; }
+    }
+    .cluster-marker span {
+      position: relative;
+      top: 1px;
+    }
+    .cluster-scan-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 200px;
+      height: 200px;
+      pointer-events: none;
+      z-index: -1;
+    }
     .flag-badge {
       position: absolute;
       bottom: -2px;
       right: -2px;
-      width: 24px;
-      height: 24px;
-      border-radius: 12px;
+      width: 28px;
+      height: 28px;
+      border-radius: 14px;
       background: white;
       border: 2px solid #1e293b;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
+      font-size: 16px;
     }
     .user-location-marker {
       background: linear-gradient(135deg, #ffd93d 0%, #f6c23e 100%);
@@ -1028,7 +1227,7 @@ export default function MapScreen() {
       doubleClickZoom: true,
       touchZoomRotate: true
     });
-    
+
     const metadataZoomThreshold = ${MARKER_META_ZOOM_THRESHOLD};
     if (!${shouldShowMarkerDetails ? 'true' : 'false'}) {
       document.body.classList.add('hide-marker-meta');
@@ -1038,6 +1237,112 @@ export default function MapScreen() {
       document.body.classList.toggle('hide-marker-meta', !shouldShow);
     };
     map.on('zoom', toggleMarkerMeta);
+
+    const markerData = ${JSON.stringify(markerPayload)};
+    let activeMarkers = [];
+
+    const clearMarkers = () => {
+      activeMarkers.forEach((marker) => marker.remove());
+      activeMarkers = [];
+    };
+
+    window.onerror = function(message, source, lineno, colno, error) {
+      try {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'mapError',
+          message,
+          source,
+          lineno,
+          colno,
+          stack: error && error.stack ? String(error.stack) : null,
+        }));
+      } catch (postError) {
+        console.warn('Failed to propagate map error', postError);
+      }
+    };
+
+    const createMarkerRoot = (marker) => {
+      const markerRoot = document.createElement('div');
+      markerRoot.className = 'custom-marker-root';
+      markerRoot.style.position = 'relative';
+      markerRoot.style.zIndex = '1000';
+
+      const baseEl = document.createElement('div');
+      baseEl.className = 'custom-marker';
+      baseEl.textContent = marker.initial;
+      markerRoot.appendChild(baseEl);
+
+      const distance = marker.distance || '0m';
+      let distanceValue = 0;
+      if (distance === '0m') {
+        distanceValue = 0;
+      } else if (distance.includes('km')) {
+        distanceValue = parseFloat(distance.replace('km', '').trim());
+      } else if (distance.includes('m')) {
+        distanceValue = parseFloat(distance.replace('m', '').trim()) / 1000;
+      }
+      const showScan = distanceValue === 0 || distanceValue < 1;
+      if (showScan) {
+        const scanContainer = document.createElement('div');
+        scanContainer.className = 'cluster-scan-container';
+        for (let i = 0; i < 3; i++) {
+          const scanCircle = document.createElement('div');
+          scanCircle.className = 'user-scan-circle';
+          scanCircle.style.animationDelay = i * 0.7 + 's';
+          scanCircle.style.width = '200px';
+          scanCircle.style.height = '200px';
+          scanContainer.appendChild(scanCircle);
+        }
+        markerRoot.appendChild(scanContainer);
+      }
+
+      if (marker.flag) {
+        const flagBadge = document.createElement('div');
+        flagBadge.className = 'flag-badge';
+        flagBadge.textContent = marker.flag;
+        markerRoot.appendChild(flagBadge);
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'marker-meta';
+      if (marker.isFallback) {
+        meta.classList.add('marker-meta--fallback');
+      }
+      meta.innerHTML = '<span class="marker-flag">' + (marker.flag || '🌍') + '</span><span class="marker-distance">' + (marker.distance || '—') + '</span>';
+      markerRoot.appendChild(meta);
+
+      if (marker.availableNow) {
+        const liveIndicator = document.createElement('div');
+        liveIndicator.className = 'marker-live-indicator';
+        liveIndicator.textContent = 'LIVE';
+        markerRoot.appendChild(liveIndicator);
+      }
+
+      markerRoot.addEventListener('click', () => {
+        window.ReactNativeWebView.postMessage(
+          JSON.stringify({
+            type: 'userClick',
+            userId: marker.id,
+          })
+        );
+      });
+
+      return markerRoot;
+    };
+
+    const renderMarkers = () => {
+      clearMarkers();
+      markerData.forEach((marker, index) => {
+        const markerRoot = createMarkerRoot(marker);
+        const markerInstance = new mapboxgl.Marker({
+          element: markerRoot,
+          anchor: 'center',
+        })
+          .setLngLat([marker.lng, marker.lat])
+          .addTo(map);
+        activeMarkers.push(markerInstance);
+      });
+    };
  
     map.on('load', () => {
       toggleMarkerMeta();
@@ -1085,101 +1390,10 @@ export default function MapScreen() {
         .setPopup(new mapboxgl.Popup().setHTML('<div style="text-align:center;"><strong>${userName}</strong></div>'))
         .addTo(map);
       
-      console.log('Adding ${markers.length} user markers to map');
-      
-      // Add custom profile markers for available users with scan circles
-      ${markers.map((marker, index) => {
-        const hasFlag = marker.flag ? true : false;
-        const flagEmoji = marker.flag || '🌍';
-        const distance = marker.distance || '0m';
-        const distanceLabel = marker.distance ? marker.distance : "";
-        const metaHtml = `<span class="marker-flag">${flagEmoji}</span><span class="marker-distance">${distanceLabel}</span>`;
-        let distanceValue = 0;
-        if (distance === '0m') {
-          distanceValue = 0;
-        } else if (distance.includes('km')) {
-          distanceValue = parseFloat(distance.replace('km', '').trim());
-        } else if (distance.includes('m')) {
-          distanceValue = parseFloat(distance.replace('m', '').trim()) / 1000;
-        }
-        const showScan = distanceValue === 0 || distanceValue < 1;
-        return `
-      setTimeout(() => {
-        const markerRoot = document.createElement('div');
-        markerRoot.className = 'custom-marker-root';
-        markerRoot.style.position = 'relative';
-        markerRoot.style.zIndex = '1000';
-
-        const baseEl = document.createElement('div');
-        baseEl.className = 'custom-marker';
-        baseEl.textContent = '${marker.initial}';
-        markerRoot.appendChild(baseEl);
-
-        const shouldShowScan = ${showScan};
-        if (shouldShowScan) {
-          const scanContainer = document.createElement('div');
-          scanContainer.style.position = 'absolute';
-          scanContainer.style.top = '50%';
-          scanContainer.style.left = '50%';
-          scanContainer.style.transform = 'translate(-50%, -50%)';
-          scanContainer.style.width = '200px';
-          scanContainer.style.height = '200px';
-          scanContainer.style.pointerEvents = 'none';
-          scanContainer.style.zIndex = '-1';
-
-          for (let i = 0; i < 3; i++) {
-            const scanCircle = document.createElement('div');
-            scanCircle.className = 'user-scan-circle';
-            scanCircle.style.animationDelay = (i * 0.7) + 's';
-            scanCircle.style.width = '200px';
-            scanCircle.style.height = '200px';
-            scanContainer.appendChild(scanCircle);
-          }
-
-          markerRoot.appendChild(scanContainer);
-        }
-
-        ${hasFlag ? `
-        const flagBadge = document.createElement('div');
-        flagBadge.className = 'flag-badge';
-        flagBadge.textContent = '${flagEmoji}';
-        markerRoot.appendChild(flagBadge);
-        ` : ''}
-
-        const markerIsFallback = ${marker.isFallback};
-        const markerIsLive = ${marker.availableNow};
-
-        const meta = document.createElement('div');
-        meta.className = 'marker-meta';
-        if (markerIsFallback) {
-          meta.classList.add('marker-meta--fallback');
-        }
-        meta.innerHTML = ${JSON.stringify(metaHtml)};
-        markerRoot.appendChild(meta);
-
-        if (markerIsLive) {
-          const liveIndicator = document.createElement('div');
-          liveIndicator.className = 'marker-live-indicator';
-          liveIndicator.textContent = 'LIVE';
-          markerRoot.appendChild(liveIndicator);
-        }
-
-        markerRoot.addEventListener('click', () => {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'userClick',
-            userId: '${marker.id}'
-          }));
-        });
-
-        const markerInstance = new mapboxgl.Marker(markerRoot)
-          .setLngLat(${JSON.stringify(marker.coordinates)})
-          .addTo(map);
-
-        console.log('Added marker ${index + 1}/${markers.length} for ${marker.name} at', ${JSON.stringify(marker.coordinates)});
-      }, ${index * 100});
-        `;
-      }).join('')}
+      renderMarkers();
     });
+    map.on('zoomend', renderMarkers);
+    map.on('moveend', renderMarkers);
   </script>
 </body>
 </html>
@@ -1245,6 +1459,7 @@ export default function MapScreen() {
             // Real map for standalone builds
             MapViewComponent && (
               <MapViewComponent
+                ref={mapRef}
                 provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
                 style={styles.map}
                 initialRegion={currentMapRegion}
@@ -1290,73 +1505,98 @@ export default function MapScreen() {
                 )}
                 
                 {/* User Markers - Only show available users */}
-                {availableUsers.map((user) => (
-                  MarkerComponent && (
-                    <MarkerComponent
-                      key={user.id}
-                      coordinate={{
-                        latitude: user.lat,
-                        longitude: user.lng,
-                      }}
-                    onPress={() => setSelectedUser(user)}
-                    >
-                      <View style={styles.markerContainer}>
-                        {/* Scan circles for nearby users (within 1km or 0m) */}
-                        {(() => {
-                          const distance = user.distance || '0m'
-                          let distanceValue = 0
-                          if (distance === '0m') {
-                            distanceValue = 0
-                          } else if (distance.includes('km')) {
-                            distanceValue = parseFloat(distance.replace('km', '').trim())
-                          } else if (distance.includes('m')) {
-                            distanceValue = parseFloat(distance.replace('m', '').trim()) / 1000
-                          }
-                          const showScan = distanceValue === 0 || distanceValue < 1
-                          if (!showScan) return null
-                          
-                          return (
-                            <>
-                              {[0, 1, 2].map((i) => (
-                                <ScanCircle key={`scan-${i}`} delay={i * 700} />
-                              ))}
-                            </>
-                          )
-                        })()}
-                        <View
-                          style={[
-                            styles.userMarkerAvatar,
-                            user.availableNow && styles.userMarkerAvatarLive,
-                          ]}
+                {mapRenderableItems.map((item) => {
+                  if (item.type === 'cluster') {
+                    return (
+                      MarkerComponent && (
+                        <MarkerComponent
+                          key={item.id}
+                          coordinate={{
+                            latitude: item.latitude,
+                            longitude: item.longitude,
+                          }}
+                          onPress={() => handleClusterZoom(item)}
                         >
-                          <Text style={styles.userMarkerInitial}>{user.name[0]}</Text>
-                          {user.flag && (
-                            <View style={styles.flagBadge}>
-                              <Text style={styles.flagText}>{user.flag}</Text>
+                          <View style={styles.clusterMarker}>
+                            <View style={styles.clusterMarkerInner}>
+                              <Text style={styles.clusterCountText}>{item.users.length}</Text>
                             </View>
-                          )}
-                        </View>
-                        {user.availableNow && shouldShowMarkerDetails && (
-                          <View style={styles.markerLivePill} pointerEvents="none">
-                            <Text style={styles.markerLiveText}>LIVE</Text>
                           </View>
-                        )}
-                        {shouldShowMarkerDetails && (
+                        </MarkerComponent>
+                      )
+                    )
+                  }
+
+                  const user = item.user
+                  return (
+                    MarkerComponent && (
+                      <MarkerComponent
+                        key={user.id}
+                        coordinate={{
+                          latitude: user.lat,
+                          longitude: user.lng,
+                        }}
+                        onPress={() => handleUserPreview(user)}
+                      >
+                        <View style={styles.markerContainer}>
+                          {/* Scan circles for nearby users (within 1km or 0m) */}
+                          {(() => {
+                            const distance = user.distance || '0m'
+                            let distanceValue = 0
+                            if (distance === '0m') {
+                              distanceValue = 0
+                            } else if (distance.includes('km')) {
+                              distanceValue = parseFloat(distance.replace('km', '').trim())
+                            } else if (distance.includes('m')) {
+                              distanceValue = parseFloat(distance.replace('m', '').trim()) / 1000
+                            }
+                            const showScan = distanceValue === 0 || distanceValue < 1
+                            if (!showScan) return null
+                            
+                            return (
+                              <>
+                                {[0, 1, 2].map((i) => (
+                                  <ScanCircle key={`scan-${i}`} delay={i * 700} />
+                                ))}
+                              </>
+                            )
+                          })()}
                           <View
                             style={[
-                              styles.markerMetaPill,
-                              user.isFallbackLocation && styles.markerMetaFallback,
+                              styles.userMarkerAvatar,
+                              user.availableNow && styles.userMarkerAvatarLive,
+                              highlightedMarkerId === user.id && styles.userMarkerHighlighted,
                             ]}
-                            pointerEvents="none"
                           >
-                            <Text style={styles.markerMetaFlag}>{user.flag || '🌍'}</Text>
-                            <Text style={styles.markerMetaDistance}>{user.distance || '—'}</Text>
+                            <Text style={styles.userMarkerInitial}>{user.name[0]}</Text>
+                            {user.flag && (
+                              <View style={styles.flagBadge}>
+                                <Text style={styles.flagText}>{user.flag}</Text>
+                              </View>
+                            )}
                           </View>
-                        )}
-                        </View>
-                    </MarkerComponent>
+                          {user.availableNow && shouldShowMarkerDetails && (
+                            <View style={styles.markerLivePill} pointerEvents="none">
+                              <Text style={styles.markerLiveText}>LIVE</Text>
+                            </View>
+                          )}
+                          {shouldShowMarkerDetails && (
+                            <View
+                              style={[
+                                styles.markerMetaPill,
+                                user.isFallbackLocation && styles.markerMetaFallback,
+                              ]}
+                              pointerEvents="none"
+                            >
+                              <Text style={styles.markerMetaFlag}>{user.flag || '🌍'}</Text>
+                              <Text style={styles.markerMetaDistance}>{user.distance || '—'}</Text>
+                            </View>
+                          )}
+                          </View>
+                      </MarkerComponent>
+                    )
                   )
-                ))}
+                })}
               </MapViewComponent>
             )
           ) : (
@@ -1378,7 +1618,7 @@ export default function MapScreen() {
                       if (data.type === 'userClick') {
                         const user = availableUsers.find(u => u.id === data.userId)
                         if (user) {
-                          setSelectedUser(user)
+                          handleUserPreview(user)
                         }
                       }
                     } catch (e) {
@@ -1939,6 +2179,11 @@ const styles = StyleSheet.create({
     shadowColor: '#38bdf8',
     shadowOpacity: 0.6,
   },
+  userMarkerHighlighted: {
+    transform: [{ scale: 1.08 }],
+    borderColor: Colors.accent.secondary,
+    shadowOpacity: 0.65,
+  },
   userMarkerInitial: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -1948,9 +2193,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -2,
     right: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: Colors.text.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1963,7 +2208,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   flagText: {
-    fontSize: 12,
+    fontSize: 16,
   },
   markerLivePill: {
     position: 'absolute',
@@ -2014,6 +2259,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.5,
+  },
+  clusterMarker: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#38bdf8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: 'rgba(15,23,42,0.65)',
+    shadowColor: '#38bdf8',
+    shadowOpacity: 0.55,
+    shadowRadius: 18,
+    elevation: 14,
+  },
+  clusterMarkerInner: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clusterCountText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#082f49',
   },
   markerInfo: {
     alignItems: 'center',
