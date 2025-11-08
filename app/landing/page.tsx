@@ -16,6 +16,13 @@ const heroStats = [
   { label: "Exchanges", value: 2500000, suffix: "+", description: "Moments captured every year" },
 ]
 
+const navLinks = [
+  { label: "Overview", href: "#top" },
+  { label: "Live Map", href: "#map" },
+  { label: "Highlights", href: "#highlights" },
+  { label: "Stats", href: "#stats" },
+]
+
 const mapHighlights = [
   { icon: "🌍", title: "Global pulses", description: "Connections surge the moment a new partner taps ‘Start conversation’." },
   { icon: "🗺️", title: "City heatmaps", description: "Tokyo, Nairobi, São Paulo, Amsterdam – see who’s meeting up tonight." },
@@ -53,6 +60,38 @@ function AmbientParticles() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(14,19,32,0.6),_rgba(9,11,18,1))]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.25),transparent_60%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(9,11,18,0.4),rgba(9,12,18,0.92))]" />
+      <motion.div
+        className="absolute inset-0 opacity-30"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(90deg, rgba(148,163,255,0.08) 0, rgba(148,163,255,0.08) 1px, transparent 1px, transparent 120px), repeating-linear-gradient(0deg, rgba(79,70,229,0.08) 0, rgba(79,70,229,0.08) 1px, transparent 1px, transparent 120px)",
+        }}
+        animate={{ backgroundPosition: ["0px 0px", "60px 40px"] }}
+        transition={{ duration: 18, repeat: Infinity, ease: "linear" }}
+      />
+      <motion.div
+        className="absolute left-1/2 top-1/2 h-[720px] w-[720px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{ background: "conic-gradient(from 180deg at 50% 50%, rgba(14,116,144,0.15), transparent 55%, rgba(192,132,252,0.2))" }}
+        animate={{ rotate: [0, 360] }}
+        transition={{ duration: 80, repeat: Infinity, ease: "linear" }}
+      />
+      <motion.svg
+        className="absolute inset-0"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="xMidYMid slice"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0.25, 0.45, 0.25] }}
+        transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+      >
+        <defs>
+          <radialGradient id="pulseGradient" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="rgba(125,211,252,0.35)" />
+            <stop offset="100%" stopColor="rgba(59,130,246,0)" />
+          </radialGradient>
+        </defs>
+        <circle cx="30" cy="28" r="16" fill="url(#pulseGradient)" />
+        <circle cx="75" cy="72" r="20" fill="url(#pulseGradient)" />
+      </motion.svg>
       <motion.span
         className="absolute left-[12%] top-[18%] h-40 w-40 rounded-full bg-sky-500/20 blur-[90px]"
         animate={{ opacity: [0.3, 0.7, 0.3] }}
@@ -68,7 +107,58 @@ function AmbientParticles() {
         animate={{ opacity: [0.2, 0.6, 0.3], scale: [0.8, 1.1, 0.9] }}
         transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
       />
+      <motion.div
+        className="absolute inset-x-[8%] top-[18%] h-[2px] rounded-full bg-gradient-to-r from-transparent via-white/20 to-transparent"
+        animate={{ opacity: [0, 0.6, 0], scaleX: [0.7, 1.05, 0.8] }}
+        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+      />
     </div>
+  )
+}
+
+function HeroHeader() {
+  const router = useRouter()
+
+  return (
+    <motion.nav
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: "easeOut" }}
+      className="mx-auto mb-12 flex w-full max-w-[1200px] items-center justify-between rounded-full border border-white/10 bg-white/5 px-6 py-4 backdrop-blur-xl"
+    >
+      <button
+        type="button"
+        className="group flex items-center gap-3 text-sm font-semibold tracking-wide text-white"
+        onClick={() => router.push("/")}
+      >
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 to-purple-500 text-lg">
+          🌐
+        </span>
+        <span className="transition group-hover:text-white/80">LangEx</span>
+      </button>
+      <div className="hidden items-center gap-6 text-xs uppercase tracking-[0.35em] text-white/60 md:flex">
+        {navLinks.map((link) => (
+          <a key={link.href} href={link.href} className="transition hover:text-white">
+            {link.label}
+          </a>
+        ))}
+      </div>
+      <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/auth/login")}
+          className="hidden h-10 rounded-full border border-white/20 bg-transparent px-5 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white md:inline-flex"
+        >
+          Sign In
+        </Button>
+        <Button
+          onClick={() => router.push("/auth/signup")}
+          className="h-10 rounded-full bg-gradient-to-r from-sky-500 via-purple-500 to-fuchsia-500 px-5 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-[0_0_24px_rgba(130,88,255,0.35)] transition hover:scale-[1.02]"
+        >
+          Join Now
+        </Button>
+      </div>
+    </motion.nav>
   )
 }
 
@@ -243,12 +333,14 @@ export default function LandingPage() {
 
   return (
     <div
+      id="top"
       className="relative min-h-screen overflow-hidden text-white"
       style={{ background: "radial-gradient(ellipse at center, #0b0f19 0%, #090b12 100%)" }}
     >
       <AmbientParticles />
 
       <header className="relative z-10 px-6 pb-16 pt-12 sm:px-10">
+        <HeroHeader />
         <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-12 lg:flex-row lg:items-center">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
@@ -322,7 +414,10 @@ export default function LandingPage() {
       </header>
 
       <main className="relative z-10 space-y-24 pb-28" id="map">
-        <section className="mx-auto flex w-full max-w-[1180px] flex-col gap-12 px-6 sm:px-10 lg:flex-row lg:items-center">
+        <section
+          id="highlights"
+          className="mx-auto flex w-full max-w-[1180px] flex-col gap-12 px-6 sm:px-10 lg:flex-row lg:items-center"
+        >
           <motion.div
             ref={mapRef}
             initial={{ opacity: 0, y: 32 }}
@@ -372,7 +467,7 @@ export default function LandingPage() {
           </motion.div>
         </section>
 
-        <section className="mx-auto w-full max-w-[1180px] px-6 sm:px-10">
+        <section id="stats" className="mx-auto w-full max-w-[1180px] px-6 sm:px-10">
           <div className="grid gap-6 sm:grid-cols-3">
             {mapStats.map((stat, index) => (
               <motion.div
