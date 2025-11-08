@@ -3,7 +3,7 @@
 PNPM=pnpm
 TS_NODE=./node_modules/.bin/tsc
 
-.PHONY: install dev build start lint typecheck env env-print deploy-prep git-init git-push vercel-setup
+.PHONY: install dev build start lint typecheck env env-print deploy-prep git-init git-push vercel-setup mobile-setup mobile-install mobile-dev mobile-build-ios mobile-build-android
 
 install:
 	$(PNPM) install
@@ -72,3 +72,37 @@ vercel-setup:
 	@echo "2. Run: vercel login"
 	@echo "3. Run: vercel"
 	@echo "4. Follow the prompts to link your project"
+
+# Mobile Development Commands
+mobile-setup:
+	@echo "Setting up mobile development environment..."
+	@cd mobile && npm install || echo "Mobile directory not found. Run: mkdir mobile"
+	@echo "Mobile setup complete!"
+
+mobile-install:
+	@echo "Installing mobile dependencies..."
+	@cd mobile && npm install
+
+mobile-dev:
+	@echo "Starting mobile development server..."
+	@cd mobile && npm start
+
+mobile-build-ios:
+	@echo "Building iOS app..."
+	@cd mobile && npx eas build --platform ios
+
+mobile-build-android:
+	@echo "Building Android app..."
+	@cd mobile && npx eas build --platform android
+
+mobile-build-all:
+	@echo "Building for both iOS and Android..."
+	@cd mobile && npx eas build --platform all
+
+mobile-eas-login:
+	@echo "Logging into Expo..."
+	@cd mobile && npx eas login
+
+mobile-eas-configure:
+	@echo "Configuring EAS build..."
+	@cd mobile && npx eas build:configure

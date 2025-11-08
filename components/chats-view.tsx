@@ -84,7 +84,21 @@ export function ChatsView({ onChatOpenChange }: ChatsViewProps) {
           .order("last_message_at", { ascending: false, nullsLast: true })
 
         if (error) {
-          console.error("[v0] Error fetching conversations:", error)
+          // Supabase errors need to be parsed from JSON string
+          let errorData: any = {}
+          try {
+            const errorJson = JSON.stringify(error, null, 2)
+            errorData = JSON.parse(errorJson)
+            console.error("[v0] Error fetching conversations:", {
+              message: errorData.message || "Unknown error",
+              code: errorData.code || "unknown",
+              details: errorData.details || null,
+              hint: errorData.hint || null,
+            })
+          } catch (e) {
+            // Fallback if stringify/parse fails
+            console.error("[v0] Error fetching conversations:", error)
+          }
           setIsLoading(false)
           return
         }
@@ -114,7 +128,10 @@ export function ChatsView({ onChatOpenChange }: ChatsViewProps) {
         // For now, using empty array
         setRequests([])
       } catch (error) {
-        console.error("[v0] Error loading chats:", error)
+        console.error("[v0] Error loading chats:", {
+          message: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error.stack : JSON.stringify(error, Object.getOwnPropertyNames(error))
+        })
       } finally {
         setIsLoading(false)
       }

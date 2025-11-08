@@ -1,0 +1,50 @@
+import { NextResponse } from 'next/server'
+
+export async function GET() {
+  const manifest = {
+    name: 'Language Exchange',
+    short_name: 'LangExchange',
+    description: 'Find nearby language practice partners',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#1e293b',
+    theme_color: '#1e293b',
+    orientation: 'portrait',
+    icons: [
+      {
+        src: '/icon-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any maskable',
+      },
+      {
+        src: '/icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any maskable',
+      },
+    ],
+    categories: ['education', 'social'],
+    shortcuts: [
+      {
+        name: 'Chats',
+        short_name: 'Chats',
+        description: 'Open your conversations',
+        url: '/?view=chats',
+        icons: [{ src: '/icon-192.png', sizes: '192x192' }],
+      },
+      {
+        name: 'Map',
+        short_name: 'Map',
+        description: 'Find language partners',
+        url: '/?view=map',
+        icons: [{ src: '/icon-192.png', sizes: '192x192' }],
+      },
+    ],
+  }
+
+  return NextResponse.json(manifest)
+}
+
+
+

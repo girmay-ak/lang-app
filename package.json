@@ -7,7 +7,10 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:ios": "cd mobile && npm run ios:build",
+    "build:android": "cd mobile && npm run android:build",
+    "mobile:dev": "cd mobile && npm start"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -64,3 +64,10 @@ In Supabase Dashboard → Authentication → URL Configuration:
 
 For detailed instructions, see `docs/DEPLOYMENT_GUIDE.md`
 
+
+
+
+
+
+
+

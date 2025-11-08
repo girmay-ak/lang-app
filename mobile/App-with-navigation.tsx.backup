@@ -1,0 +1,96 @@
+import { StatusBar } from 'expo-status-bar'
+import { StyleSheet, View, Text } from 'react-native'
+import { NavigationContainer } from '@react-navigation/native'
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
+
+// Placeholder screens - you'll replace these with your actual components
+function MapScreen() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.text}>Map Screen</Text>
+    </View>
+  )
+}
+
+function FeedScreen() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.text}>Feed Screen</Text>
+    </View>
+  )
+}
+
+function ChatsScreen() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.text}>Chats Screen</Text>
+    </View>
+  )
+}
+
+function NotificationsScreen() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.text}>Notifications Screen</Text>
+    </View>
+  )
+}
+
+function ProfileScreen() {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.text}>Profile Screen</Text>
+    </View>
+  )
+}
+
+const Tab = createBottomTabNavigator()
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Tab.Navigator
+          screenOptions={{
+            headerShown: false,
+            tabBarActiveTintColor: '#3b82f6',
+            tabBarInactiveTintColor: '#64748b',
+            tabBarStyle: {
+              backgroundColor: '#1e293b',
+              borderTopColor: '#334155',
+            },
+          }}
+        >
+          <Tab.Screen name="Map" component={MapScreen} />
+          <Tab.Screen name="Feed" component={FeedScreen} />
+          <Tab.Screen name="Chats" component={ChatsScreen} />
+          <Tab.Screen name="Notifications" component={NotificationsScreen} />
+          <Tab.Screen name="Profile" component={ProfileScreen} />
+        </Tab.Navigator>
+      </NavigationContainer>
+      <StatusBar style="light" />
+    </SafeAreaProvider>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  text: {
+    color: '#ffffff',
+    fontSize: 18,
+  },
+})
+
+
+
+
+
+
+
+

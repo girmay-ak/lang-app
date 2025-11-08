@@ -60,7 +60,21 @@ export function NotificationsView() {
           .limit(50)
 
         if (error) {
-          console.error("[v0] Error fetching notifications:", error)
+          // Supabase errors need to be parsed from JSON string
+          let errorData: any = {}
+          try {
+            const errorJson = JSON.stringify(error, null, 2)
+            errorData = JSON.parse(errorJson)
+            console.error("[v0] Error fetching notifications:", {
+              message: errorData.message || "Unknown error",
+              code: errorData.code || "unknown",
+              details: errorData.details || null,
+              hint: errorData.hint || null,
+            })
+          } catch (e) {
+            // Fallback if stringify/parse fails
+            console.error("[v0] Error fetching notifications:", error)
+          }
           setIsLoading(false)
           return
         }
@@ -71,10 +85,18 @@ export function NotificationsView() {
             if (notif.data?.user_id || notif.data?.users) {
               const userIds = notif.data.users || [notif.data.user_id].filter(Boolean)
               if (userIds.length > 0) {
-                const { data: users } = await supabase
+                const { data: users, error: usersError } = await supabase
                   .from("users")
                   .select("id, full_name, avatar_url")
                   .in("id", userIds.slice(0, 3)) // Limit to first 3 users
+                
+                if (usersError) {
+                  console.error("[v0] Error fetching users for notification:", {
+                    notificationId: notif.id,
+                    userIds,
+                    error: usersError
+                  })
+                }
                 
                 return {
                   ...notif,
@@ -88,7 +110,10 @@ export function NotificationsView() {
 
         setNotifications(notificationsWithUsers as any)
       } catch (error) {
-        console.error("[v0] Error loading notifications:", error)
+        console.error("[v0] Error loading notifications:", {
+          message: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error.stack : error
+        })
       } finally {
         setIsLoading(false)
       }

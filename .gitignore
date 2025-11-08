@@ -58,3 +58,15 @@ Thumbs.db
 *.temp
 .cache/
 
+# Mobile/Expo
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/build/
+mobile/*.jks
+mobile/*.p8
+mobile/*.p12
+mobile/*.key
+mobile/*.mobileprovision
+mobile/GoogleService-Info.plist
+mobile/google-service-account.json
