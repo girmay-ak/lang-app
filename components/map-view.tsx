@@ -137,12 +137,26 @@ const formatDistance = (km?: number): string => {
 interface MapViewProps {
   onSetFlag: () => void
   onProfileModalChange?: (isOpen: boolean) => void
+  onRegisterAvailabilityToggle?: (toggle: (() => void) | null) => void
 }
 
-export function MapView({ onSetFlag, onProfileModalChange }: MapViewProps) {
+export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilityToggle }: MapViewProps) {
   const [selectedUser, setSelectedUser] = useState<MapUser | null>(null)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false)
+  useEffect(() => {
+    if (!onRegisterAvailabilityToggle) return
+
+    const openAvailability = () => {
+      setIsAvailabilityModalOpen(true)
+    }
+
+    onRegisterAvailabilityToggle(openAvailability)
+
+    return () => {
+      onRegisterAvailabilityToggle(null)
+    }
+  }, [onRegisterAvailabilityToggle])
   const [isAvailable, setIsAvailable] = useState(false)
   const [filterDistance, setFilterDistance] = useState(25)
   const [filterAvailableNow, setFilterAvailableNow] = useState(false)

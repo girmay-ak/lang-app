@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { MapView } from "@/components/map-view"
 import { ProfileView } from "@/components/profile-view"
 import { FeedView } from "@/components/feed-view"
@@ -29,6 +29,11 @@ export default function AppRoot() {
   const [showWelcome, setShowWelcome] = useState(false)
   const hasCheckedAuth = useRef(false)
   const isProcessingAuthChange = useRef(false)
+  const mapAvailabilityToggleRef = useRef<(() => void) | null>(null)
+
+  const handleRegisterAvailabilityToggle = useCallback((toggle: (() => void) | null) => {
+    mapAvailabilityToggleRef.current = toggle
+  }, [])
 
   useEffect(() => {
     if (hasCheckedAuth.current) return
@@ -427,7 +432,11 @@ export default function AppRoot() {
         ) : (
           <>
             {activeTab === "map" && (
-              <MapView onSetFlag={() => setIsFlagModalOpen(true)} onProfileModalChange={setIsProfileModalOpen} />
+              <MapView
+                onSetFlag={() => setIsFlagModalOpen(true)}
+                onProfileModalChange={setIsProfileModalOpen}
+                onRegisterAvailabilityToggle={handleRegisterAvailabilityToggle}
+              />
             )}
             {activeTab === "feed" && <FeedView />}
             {activeTab === "chats" && <ChatsView onChatOpenChange={setIsChatOpen} />}
@@ -438,7 +447,17 @@ export default function AppRoot() {
       </main>
 
       {!isProfileModalOpen && !isChatOpen && !showNewExchange && (
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} onNewExchange={() => setShowNewExchange(true)} />
+        <BottomNav
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onNewExchange={() => {
+            if (activeTab === "map" && mapAvailabilityToggleRef.current) {
+              mapAvailabilityToggleRef.current()
+              return
+            }
+            setShowNewExchange(true)
+          }}
+        />
       )}
 
       <SetFlagModal open={isFlagModalOpen} onOpenChange={setIsFlagModalOpen} />
