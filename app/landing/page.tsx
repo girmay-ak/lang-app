@@ -7,11 +7,15 @@ import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import CountUp from "react-countup"
 
-import { NetworkVisualization, OrbitingSkills, GlowLineEffect, ShimmerButton, TextReveal } from "seraui"
+import { NetworkVisual } from "@/components/marketing/network-visual"
+import { OrbitingSkills } from "@/components/marketing/orbiting-skills"
+import { GlowLineEffect } from "@/components/marketing/glow-line-effect"
 import { LaserFlowBackground } from "@/components/marketing/laser-flow"
 
 import { Button } from "@/components/ui/button"
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel"
+import { ShimmerButton } from "@/components/ui/shimmer-button"
+import { TextReveal } from "@/components/ui/text-reveal"
 
 const problems = [
   {
@@ -129,12 +133,8 @@ const fadeUp = {
 
 export default function LandingPage() {
   const router = useRouter()
-
-  const orbitingProps = useMemo(
-    () => ({
-      // @ts-expect-error The library exposes additional props not typed in the bundle.
-      className: "size-full opacity-40",
-    }),
+  const orbitingSkillItems = useMemo(
+    () => heroFlags.map((flag) => ({ label: flag.label, icon: flag.emoji })),
     [],
   )
 
@@ -292,9 +292,8 @@ export default function LandingPage() {
                 <p className="text-2xl font-semibold text-white">Den Haag ↔ Tokyo</p>
                 <p className="text-sm text-white/65">12 new matches this hour</p>
               </div>
-              <div className="absolute inset-0">
-                {/* @ts-expect-error Decorative usage */}
-                <OrbitingSkills {...orbitingProps} />
+              <div className="pointer-events-none absolute inset-0 opacity-40">
+                <OrbitingSkills items={orbitingSkillItems} />
               </div>
             </div>
           </div>
@@ -380,8 +379,7 @@ export default function LandingPage() {
                 </motion.div>
               ))}
               <div className="pointer-events-none absolute inset-x-1/2 hidden h-full -translate-x-1/2 items-center justify-center md:flex">
-                {/* @ts-expect-error GlowLineEffect untyped */}
-                <GlowLineEffect className="h-[calc(100%-4rem)] w-1 bg-gradient-to-b from-sky-400/40 via-white/40 to-fuchsia-400/40" />
+                    <GlowLineEffect direction="vertical" intensity="strong" className="ml-[-0.5rem] h-[calc(100%-4rem)]" />
               </div>
             </div>
           </div>
@@ -465,7 +463,7 @@ export default function LandingPage() {
                 <div className="absolute inset-0 rounded-[32px] border border-white/10 bg-white/5 blur-2xl" />
                 <div className="absolute inset-0">
                   {/* @ts-expect-error SeraUI typing */}
-                  <NetworkVisualization className="size-full" />
+                  <NetworkVisual className="size-full" />
                 </div>
                 <div className="relative z-10 mx-auto max-w-[80%] rounded-3xl border border-white/10 bg-slate-900/70 p-6 text-center backdrop-blur-xl">
                   <p className="text-sm text-white/75">

@@ -2,6 +2,8 @@
 
 import { useMemo } from "react"
 
+import { cn } from "@/lib/utils"
+
 interface NetworkNode {
   id: string
   x: number
@@ -46,7 +48,11 @@ const connections: NetworkConnection[] = [
   { id: "jp-au", from: "jp", to: "au" },
 ]
 
-export function NetworkVisual() {
+interface NetworkVisualProps {
+  className?: string
+}
+
+export function NetworkVisual({ className }: NetworkVisualProps) {
   const nodeMap = useMemo(() => {
     return nodes.reduce<Record<string, NetworkNode>>((acc, node) => {
       acc[node.id] = node
@@ -56,7 +62,7 @@ export function NetworkVisual() {
 
   return (
     <div
-      className="relative h-[520px] w-full overflow-hidden rounded-[32px]"
+      className={cn("relative h-[520px] w-full overflow-hidden rounded-[32px]", className)}
       style={{
         backgroundImage:
           "linear-gradient(135deg, rgba(15,23,42,0.92) 0%, rgba(2,6,23,0.95) 100%), url('https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Blue_Marble_2002.png/1280px-Blue_Marble_2002.png')",
