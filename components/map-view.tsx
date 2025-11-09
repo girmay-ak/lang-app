@@ -37,6 +37,7 @@ interface MapUser {
   name: string;
   language: string;
   flag: string;
+  nativeFlag?: string;
   distance: string;
   lat: number;
   lng: number;
@@ -391,21 +392,23 @@ export function MapView({
       }));
 
       const languagesSpoken = [...spoken, ...learning];
+      const nativeFlagIcon = spoken[0]?.flag ?? flag;
 
       return {
         id: dbUser.id,
         name: dbUser.full_name ?? "Language Explorer",
         language: languageName,
         flag,
+        nativeFlag: nativeFlagIcon,
         distance: dbUser.distanceFormatted ?? formatDistance(dbUser.distance),
         lat: coordinates.latitude,
         lng: coordinates.longitude,
         bio: dbUser.bio ?? "Language enthusiast ready to connect.",
-        availableFor: "30 min",
+    availableFor: "30 min",
         image: dbUser.avatar_url ?? "/placeholder-user.jpg",
         isOnline: Boolean(dbUser.is_online),
         rating: 4.8,
-        responseTime: "2 min",
+    responseTime: "2 min",
         currentLocation: dbUser.city ?? "Unknown location",
         availableNow: dbUser.availability_status === "available",
         timePreference:
@@ -507,7 +510,7 @@ export function MapView({
       bio: currentUserProfile?.bio ?? "Ready to meet nearby learners.",
       availableFor: `${availabilityDuration} min`,
       image: currentUserProfile?.avatar_url ?? "/placeholder-user.jpg",
-      isOnline: true,
+    isOnline: true,
       rating: 5,
       responseTime: "Instant",
       currentLocation: displayCity,
@@ -516,7 +519,7 @@ export function MapView({
       languagesSpoken: viewerLanguages,
       isFallbackLocation: false,
       availabilityMessage: availabilityMessage || "Ready to connect nearby.",
-      availabilityEmoji,
+      availabilityEmoji: availabilityEmoji,
       isViewer: true,
     };
   }, [
@@ -935,14 +938,14 @@ export function MapView({
 
             <div className="relative flex h-full flex-col">
               <div className="flex items-center justify-between px-6 pt-6">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => handleUserSelect(null)}
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => handleUserSelect(null)}
                   className="h-11 w-11 rounded-full border border-white/10 bg-white/5 text-white transition hover:bg-white/15"
                 >
                   <ArrowLeft className="h-5 w-5" />
-                </Button>
+              </Button>
                 <motion.div
                   className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.28em] text-white/60"
                   animate={{ opacity: [0.6, 1, 0.6] }}
@@ -981,9 +984,9 @@ export function MapView({
                           alt={selectedUser.name}
                         />
                         <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-sky-500 text-3xl font-bold text-white">
-                          {selectedUser.name[0]}
-                        </AvatarFallback>
-                      </Avatar>
+                    {selectedUser.name[0]}
+                  </AvatarFallback>
+                </Avatar>
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
@@ -992,7 +995,7 @@ export function MapView({
                           Available now
                         </span>
                       </div>
-                      <div>
+                <div>
                         <h2 className="text-2xl font-semibold text-white">
                           {selectedUser.name}
                         </h2>
@@ -1000,8 +1003,8 @@ export function MapView({
                           {userHandle} · {distanceLabel}
                         </p>
                       </div>
-                    </div>
-                  </div>
+                </div>
+              </div>
 
                   <div className="mt-5 flex flex-wrap items-center gap-3">
                     {nativeLanguages.length > 0 && (
@@ -1024,13 +1027,13 @@ export function MapView({
                             {lang.flag}
                           </motion.span>
                         ))}
-                      </div>
+                </div>
                     )}
                     {learningLanguages.length > 0 && (
                       <div className="flex items-center gap-2 rounded-full border border-sky-400/40 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-100">
                         <span className="font-semibold uppercase tracking-wide text-sky-200">
                           Learning
-                        </span>
+                  </span>
                         {learningLanguages.map((lang) => (
                           <motion.span
                             key={`learn-${lang.language}`}
@@ -1046,7 +1049,7 @@ export function MapView({
                             {lang.flag}
                           </motion.span>
                         ))}
-                      </div>
+                </div>
                     )}
                   </div>
                 </motion.div>
@@ -1063,7 +1066,7 @@ export function MapView({
                       <p className="text-sm leading-relaxed text-white/80">
                         {selectedUser.bio}
                       </p>
-                    </div>
+                  </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {selectedUser.languagesSpoken.map((lang, index) => (
@@ -1078,7 +1081,7 @@ export function MapView({
                         </span>
                       </span>
                     ))}
-                  </div>
+                </div>
                 </motion.div>
 
                 <motion.div
@@ -1092,7 +1095,7 @@ export function MapView({
                       <div className="flex items-center gap-2 text-sm font-medium text-white">
                         <span className="text-2xl">{availabilityEmoji}</span>
                         <span>{timeLeftLabel}</span>
-                      </div>
+                </div>
                       <p className="text-sm text-white/80">
                         {selectedUser.availableFor ||
                           "Open for a relaxed language exchange."}
@@ -1100,8 +1103,8 @@ export function MapView({
                       <div className="flex items-center gap-2 text-sm text-white/80">
                         <MapPin className="h-4 w-4 text-emerald-200" />
                         <span>{locationLabel}</span>
+              </div>
                       </div>
-                    </div>
                     <div className="relative h-24 w-24 overflow-hidden rounded-2xl border border-white/30 bg-white/10">
                       {mapPreviewUrl ? (
                         <Image
@@ -1114,17 +1117,17 @@ export function MapView({
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-2xl">
                           🗺️
-                        </div>
-                      )}
                     </div>
+                      )}
                   </div>
+                </div>
                   <div className="mt-4 flex items-center gap-3 text-xs text-emerald-100/80">
                     <Sparkles className="h-4 w-4" />
                     <span>
                       Let’s make a plan right away — short notice meetups
                       welcome.
                     </span>
-                  </div>
+              </div>
                 </motion.div>
 
                 <motion.div
@@ -1235,8 +1238,8 @@ export function MapView({
               </div>
             </div>
           </motion.div>
+          </div>
         </div>
-      </div>
     );
   }
 
@@ -1324,7 +1327,7 @@ export function MapView({
 
             <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 px-4 py-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+                  <div>
                   <p className="flex items-center gap-2 text-sm font-semibold text-white">
                     <Zap className="h-4 w-4 text-emerald-300" />
                     Available Now
@@ -1333,7 +1336,7 @@ export function MapView({
                     When enabled, other users can see you’re available for
                     language exchange.
                   </p>
-                </div>
+                  </div>
                 <motion.button
                   type="button"
                   onClick={handleToggleAvailability}
@@ -1381,8 +1384,8 @@ export function MapView({
                     </motion.span>
                   </motion.span>
                 </motion.button>
-              </div>
-            </div>
+                  </div>
+                </div>
 
             <AnimatePresence mode="wait">
               {tempIsAvailable ? (
@@ -1401,14 +1404,14 @@ export function MapView({
                     className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4"
                   >
                     <div className="flex flex-col gap-3">
-                      <div>
+                  <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/40">
                           Custom Message
                         </p>
                         <p className="mt-1 text-xs text-white/60">
                           Share what makes this availability window special.
                         </p>
-                      </div>
+                  </div>
                       <Textarea
                         value={tempAvailabilityMessage}
                         onChange={(event) =>
@@ -1428,8 +1431,8 @@ export function MapView({
                         <div className="flex items-center gap-1 text-white/60">
                           <Smile className="h-3.5 w-3.5 text-emerald-300" />
                           <span>Pick a vibe</span>
-                        </div>
-                      </div>
+                  </div>
+                </div>
                       <div className="flex items-center gap-2">
                         {AVAILABILITY_EMOJIS.map((emoji) => {
                           const isActive = tempAvailabilityEmoji === emoji;
@@ -1490,7 +1493,7 @@ export function MapView({
                           </motion.button>
                         );
                       })}
-                    </div>
+                  </div>
                     <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
                       <Slider
                         value={[tempAvailabilityDuration]}
@@ -1507,8 +1510,8 @@ export function MapView({
                       <div className="mt-2 flex items-center justify-between text-xs text-white/50">
                         <span>Availability window</span>
                         <span>{tempAvailabilityDuration} minutes</span>
-                      </div>
-                    </div>
+                  </div>
+                </div>
                   </div>
 
                   <motion.div
@@ -1539,7 +1542,7 @@ export function MapView({
                       className="h-9 rounded-full border border-white/10 px-4 text-xs font-semibold text-sky-300 transition hover:bg-white/10"
                     >
                       Change
-                    </button>
+              </button>
                   </motion.div>
 
                   {mapPreviewUrl && (
@@ -1562,7 +1565,7 @@ export function MapView({
                           className="object-cover"
                         />
                         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/40 via-slate-950/10 to-transparent" />
-                      </div>
+            </div>
                       <div className="px-4 py-3 text-xs text-white/60">
                         Preview updates after you save your availability.
                       </div>
@@ -1608,7 +1611,7 @@ export function MapView({
               <p className="mt-4 text-sm text-rose-300">{availabilityError}</p>
             )}
 
-            <Button
+              <Button
               onClick={handleSaveAvailability}
               disabled={isSavingAvailability}
               className={`mt-8 h-12 w-full rounded-full text-sm font-semibold shadow-lg transition ${
@@ -1622,39 +1625,39 @@ export function MapView({
                 : tempIsAvailable
                   ? "Set as Available"
                   : "Set as Unavailable"}
-            </Button>
+              </Button>
           </div>
         </div>
       )}
 
       <div className="absolute top-4 left-4 right-4 z-[1000] pointer-events-none">
         <div className="flex items-center justify-between">
-          <Button
-            size="icon"
+        <Button
+          size="icon"
             className="glass-button h-12 w-12 rounded-full pointer-events-auto"
-            onClick={() => setIsFilterOpen(true)}
-          >
-            <Filter className="h-5 w-5 text-white" />
-          </Button>
+          onClick={() => setIsFilterOpen(true)}
+        >
+          <Filter className="h-5 w-5 text-white" />
+        </Button>
 
           <div className="glass-button pointer-events-auto flex items-center gap-2 rounded-full px-4 py-2">
-            <Users className="h-4 w-4 text-white" />
+          <Users className="h-4 w-4 text-white" />
             <span className="text-sm font-semibold text-white">
               {nearbyCount} nearby
             </span>
-          </div>
+        </div>
 
-          <Button
-            size="icon"
+        <Button
+          size="icon"
             className={`pointer-events-auto h-12 w-12 rounded-full transition-all shadow-lg ${
-              isAvailable
+            isAvailable
                 ? "animate-pulse-slow bg-gradient-to-br from-green-400 to-emerald-500 hover:from-green-500 hover:to-emerald-600"
-                : "glass-button"
-            }`}
-            onClick={() => setIsAvailabilityModalOpen(true)}
-          >
+              : "glass-button"
+          }`}
+          onClick={() => setIsAvailabilityModalOpen(true)}
+        >
             <Zap className="h-5 w-5 text-white" />
-          </Button>
+        </Button>
         </div>
 
         <div className="pointer-events-auto mt-4 flex justify-center">
@@ -1737,7 +1740,7 @@ export function MapView({
                         {selectedPoi.subtitle}
                       </p>
                     )}
-                  </div>
+    </div>
                 </div>
                 <button
                   type="button"
