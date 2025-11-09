@@ -310,7 +310,12 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     return (
       <div className="h-full relative bg-gray-900">
         <div className="absolute inset-0 opacity-30">
-          <MapboxMap users={mapUsers} onUserClick={() => {}} currentUserLocation={effectiveUserLocation} />
+          <MapboxMap
+            users={mapUsers}
+            onUserClick={() => {}}
+            currentUserLocation={effectiveUserLocation}
+            showCurrentUserRadar={isAvailable}
+          />
         </div>
 
         <div className="absolute inset-0 flex items-center justify-end animate-slide-in-right">
@@ -779,7 +784,12 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       </div>
 
       <div className="absolute inset-0">
-        <MapboxMap users={mapUsers} onUserClick={handleUserSelect} currentUserLocation={effectiveUserLocation} />
+        <MapboxMap
+          users={mapUsers}
+          onUserClick={handleUserSelect}
+          currentUserLocation={effectiveUserLocation}
+          showCurrentUserRadar={isAvailable}
+        />
       </div>
     </div>
   )

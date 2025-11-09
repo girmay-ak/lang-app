@@ -28,15 +28,99 @@ interface MapboxMapProps {
   users: User[]
   onUserClick: (user: User) => void
   currentUserLocation?: { lat: number; lng: number } | null
+  showCurrentUserRadar?: boolean
 }
 
-export function MapboxMap({ users, onUserClick, currentUserLocation }: MapboxMapProps) {
+export function MapboxMap({ users, onUserClick, currentUserLocation, showCurrentUserRadar = true }: MapboxMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
+  const currentUserRadarRef = useRef<any>(null)
+  const radarStyleInjectedRef = useRef(false)
   const [isLoaded, setIsLoaded] = useState(false)
   const [mapStyle, setMapStyle] = useState<"standard" | "satellite" | "3d">("standard")
   const [showStyleSwitcher, setShowStyleSwitcher] = useState(false)
+
+  const ensureRadarStyles = useCallback(() => {
+    if (radarStyleInjectedRef.current || typeof window === "undefined") return
+    const style = document.createElement("style")
+    style.innerHTML = `
+      @keyframes radar-pulse {
+        0% { transform: scale(0.35); opacity: 0.55; }
+        55% { transform: scale(1); opacity: 0.15; }
+        100% { transform: scale(1.35); opacity: 0; }
+      }
+
+      @keyframes radar-sweep {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .current-user-radar-marker {
+        position: relative;
+        width: 220px;
+        height: 220px;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+      }
+
+      .current-user-radar-marker .pulse-ring {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 160px;
+        height: 160px;
+        margin: -80px 0 0 -80px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(56, 189, 248, 0.35) 0%, rgba(56, 189, 248, 0) 70%);
+        border: 2px solid rgba(56, 189, 248, 0.5);
+        animation: radar-pulse 3.2s ease-out infinite;
+      }
+
+      .current-user-radar-marker .pulse-ring:nth-child(2) {
+        animation-delay: 1.1s;
+        opacity: 0.4;
+      }
+
+      .current-user-radar-marker .pulse-ring:nth-child(3) {
+        animation-delay: 2.2s;
+        opacity: 0.25;
+      }
+
+      .current-user-radar-marker .radar-sweep {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 190px;
+        height: 190px;
+        margin: -95px 0 0 -95px;
+        border-radius: 50%;
+        background: conic-gradient(
+          rgba(56, 189, 248, 0.55),
+          rgba(56, 189, 248, 0.15) 35%,
+          transparent 55%
+        );
+        filter: blur(2px);
+        animation: radar-sweep 5s linear infinite;
+        opacity: 0.6;
+      }
+
+      .current-user-radar-marker .radar-core {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 22px;
+        height: 22px;
+        margin: -11px 0 0 -11px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #38bdf8, #6366f1);
+        box-shadow: 0 0 18px rgba(56, 189, 248, 0.9);
+        border: 2px solid rgba(255, 255, 255, 0.75);
+      }
+    `
+    document.head.appendChild(style)
+    radarStyleInjectedRef.current = true
+  }, [])
 
   const add3DBuildings = (map: any, style: "standard" | "satellite" | "3d") => {
     try {
@@ -290,14 +374,62 @@ export function MapboxMap({ users, onUserClick, currentUserLocation }: MapboxMap
     })
   }, [users, isLoaded, renderMarkers])
 
+  // Animate a radar effect around the current user location
   useEffect(() => {
-    if (!mapInstanceRef.current || !isLoaded || !currentUserLocation) return
+    if (!mapInstanceRef.current || !isLoaded || !currentUserLocation || !showCurrentUserRadar) {
+      if (currentUserRadarRef.current) {
+        currentUserRadarRef.current.remove()
+        currentUserRadarRef.current = null
+      }
+      return
+    }
 
-    mapInstanceRef.current.easeTo({
-      center: [currentUserLocation.lng, currentUserLocation.lat],
-      duration: 800,
-    })
-  }, [currentUserLocation, isLoaded])
+    const map = mapInstanceRef.current
+
+    import("mapbox-gl")
+      .then(() => {
+        try {
+          ensureRadarStyles()
+
+          if (!currentUserRadarRef.current) {
+            const el = document.createElement("div")
+            el.className = "current-user-radar-marker"
+            el.innerHTML = `
+              <div class="pulse-ring"></div>
+              <div class="pulse-ring"></div>
+              <div class="pulse-ring"></div>
+              <div class="radar-sweep"></div>
+              <div class="radar-core"></div>
+            `
+
+            currentUserRadarRef.current = new mapboxgl.default.Marker({
+              element: el,
+              anchor: "center",
+            })
+              .setLngLat([currentUserLocation.lng, currentUserLocation.lat])
+              .addTo(map)
+          } else {
+            currentUserRadarRef.current.setLngLat([currentUserLocation.lng, currentUserLocation.lat])
+          }
+        } catch (error) {
+          console.error("[v0] Error adding current user radar:", error)
+        }
+      })
+      .catch((error) => {
+        console.error("[v0] Error loading Mapbox GL for radar:", error)
+      })
+
+    return () => {
+      try {
+        if (currentUserRadarRef.current) {
+          currentUserRadarRef.current.remove()
+          currentUserRadarRef.current = null
+        }
+      } catch (error) {
+        console.warn("[v0] Error cleaning up radar layers:", error)
+      }
+    }
+  }, [currentUserLocation, isLoaded, showCurrentUserRadar, ensureRadarStyles])
 
   return (
     <div className="relative w-full h-full">
