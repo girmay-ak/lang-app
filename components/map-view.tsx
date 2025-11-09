@@ -8,6 +8,8 @@ import { Filter, Users, Zap, X } from "lucide-react"
 import { MapboxMap } from "./mapbox-map"
 import { FilterPanel } from "./filter-panel"
 import { useMap } from "@/hooks/use-map"
+import { userService } from "@/lib/services/user-service"
+import { createClient } from "@/lib/supabase/client"
 
 interface MapUser {
   id: string
@@ -149,6 +151,8 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   const [availabilityDuration, setAvailabilityDuration] = useState<number>(60)
   const [tempIsAvailable, setTempIsAvailable] = useState(false)
   const [tempAvailabilityDuration, setTempAvailabilityDuration] = useState<number>(60)
+  const [isSavingAvailability, setIsSavingAvailability] = useState(false)
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null)
   const [filterDistance, setFilterDistance] = useState(25)
   const [filterAvailableNow, setFilterAvailableNow] = useState(false)
   const [filterSkillLevel, setFilterSkillLevel] = useState<string[]>([])
@@ -254,6 +258,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
   useEffect(() => {
     if (isAvailabilityModalOpen) {
+      setAvailabilityError(null)
       setTempIsAvailable(isAvailable)
       setTempAvailabilityDuration(availabilityDuration)
     }
@@ -272,11 +277,33 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
   const durationOptions = [30, 60, 90, 120] as const
 
-  const handleSaveAvailability = () => {
-    setIsAvailable(tempIsAvailable)
-    setAvailabilityDuration(tempAvailabilityDuration)
-    setFilterAvailableNow(tempIsAvailable)
-    setIsAvailabilityModalOpen(false)
+  const handleSaveAvailability = async () => {
+    setAvailabilityError(null)
+    setIsSavingAvailability(true)
+    try {
+      const supabase = createClient()
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      if (sessionError) throw sessionError
+      const userId = session?.user?.id
+      if (!userId) throw new Error("Please sign in again to update availability.")
+
+      await userService.updateAvailability(userId, tempIsAvailable ? "available" : "offline")
+
+      setIsAvailable(tempIsAvailable)
+      setAvailabilityDuration(tempAvailabilityDuration)
+      setFilterAvailableNow(tempIsAvailable)
+      setIsAvailabilityModalOpen(false)
+      await refetch()
+    } catch (error: any) {
+      console.error("[MapView] Availability update error:", error)
+      setAvailabilityError(error?.message ?? "Failed to update availability. Please try again.")
+    } finally {
+      setIsSavingAvailability(false)
+    }
   }
 
   if (selectedUser) {
@@ -428,7 +455,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                     >
                       {lang.flag} <span className="text-gray-700">{lang.language}</span>
                       <span className="text-xs uppercase tracking-wide text-gray-500">{lang.level}</span>
-                    </span>
+                  </span>
                   ))}
                 </div>
 
@@ -633,8 +660,8 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
             </div>
 
             <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
                   <p className="flex items-center gap-2 text-sm font-semibold text-white">
                     <Zap className="h-4 w-4 text-emerald-300" />
                     Available Now
@@ -643,7 +670,11 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                     When enabled, other users can see you’re available for language exchange.
                   </p>
                 </div>
-                <Switch checked={tempIsAvailable} onCheckedChange={setTempIsAvailable} />
+                <Switch
+                  checked={tempIsAvailable}
+                  onCheckedChange={setTempIsAvailable}
+                  disabled={isSavingAvailability}
+                />
               </div>
             </div>
 
@@ -653,10 +684,11 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                   <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/40">Duration</p>
                   <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {durationOptions.map((minutes) => (
-                      <button
+              <button
                         type="button"
                         key={minutes}
                         onClick={() => setTempAvailabilityDuration(minutes)}
+                        disabled={isSavingAvailability}
                         className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
                           tempAvailabilityDuration === minutes
                             ? "border-emerald-400 bg-emerald-500/20 text-emerald-100"
@@ -684,7 +716,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                   >
                     Change
                   </button>
-                </div>
+                  </div>
 
                 <div className="mt-6 rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100">
                   You’ll be visible to nearby users for {tempAvailabilityDuration} minutes.
@@ -693,19 +725,28 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
             ) : (
               <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 px-4 py-5 text-center text-sm text-white/60">
                 You&apos;re currently unavailable
-              </div>
+            </div>
             )}
 
-            <Button
+            {availabilityError && (
+              <p className="mt-4 text-sm text-rose-300">{availabilityError}</p>
+            )}
+
+              <Button
               onClick={handleSaveAvailability}
+              disabled={isSavingAvailability}
               className={`mt-8 h-12 w-full rounded-full text-sm font-semibold shadow-lg transition ${
                 tempIsAvailable
-                  ? "bg-gradient-to-r from-emerald-400 to-emerald-500 text-emerald-950 hover:from-emerald-500 hover:to-emerald-600"
-                  : "bg-white/10 text-white hover:bg-white/15"
+                  ? "bg-gradient-to-r from-emerald-400 to-emerald-500 text-emerald-950 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-70 disabled:hover:from-emerald-400 disabled:hover:to-emerald-500"
+                  : "bg-white/10 text-white hover:bg-white/15 disabled:opacity-70"
               }`}
             >
-              {tempIsAvailable ? "Set as Available" : "Set as Unavailable"}
-            </Button>
+              {isSavingAvailability
+                ? "Saving..."
+                : tempIsAvailable
+                  ? "Set as Available"
+                  : "Set as Unavailable"}
+              </Button>
           </div>
         </div>
       )}

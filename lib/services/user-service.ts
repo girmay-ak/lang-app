@@ -103,6 +103,24 @@ export const userService = {
       throw error
     }
   },
+
+  async updateAvailability(userId: string, status: "available" | "busy" | "offline") {
+    const supabase = createClient()
+    const updates = {
+      availability_status: status,
+      last_active_at: new Date().toISOString(),
+    }
+
+    const { error } = await supabase
+      .from("users")
+      .update(updates)
+      .eq("id", userId)
+
+    if (error) {
+      console.error("[userService] updateAvailability error:", error)
+      throw error
+    }
+  },
 }
 
 

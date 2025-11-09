@@ -35,6 +35,30 @@ const formatDistance = (km: number): string => {
   return `${km.toFixed(1)}km`
 }
 
+const applyFilters = (users: NearbyUser[], filters?: FindNearbyFilters) => {
+  let filtered = users
+
+  if (filters?.availableNow) {
+    filtered = filtered.filter((u) => u.availability_status === "available")
+  }
+
+  if (filters?.languages?.length) {
+    filtered = filtered.filter((u) => {
+      const userLanguages = [...(u.languages_speak ?? []), ...(u.languages_learn ?? [])]
+      return filters.languages!.some((lang) => userLanguages.includes(lang))
+    })
+  }
+
+  if (filters?.skillLevel?.length) {
+    filtered = filtered.filter((u) => {
+      const languageRows = (u as any).user_languages ?? []
+      return languageRows.some((row: any) => filters.skillLevel!.includes(row.proficiency_level))
+    })
+  }
+
+  return filtered
+}
+
 export const mapService = {
   async findNearbyUsers(
     latitude: number,
@@ -56,20 +80,18 @@ export const mapService = {
         return this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
       }
 
-      let users: NearbyUser[] = Array.isArray(data) ? data : []
-
-      if (filters?.availableNow) {
-        users = users.filter((u) => u.availability_status === "available")
+      const rpcUsers = applyFilters(Array.isArray(data) ? data : [], filters)
+      const fallbackUsers = await this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
+      if (!fallbackUsers.length) {
+        return rpcUsers
       }
 
-      if (filters?.languages?.length) {
-        users = users.filter((u) => {
-          const userLanguages = [...(u.languages_speak ?? []), ...(u.languages_learn ?? [])]
-          return filters.languages!.some((lang) => userLanguages.includes(lang))
-        })
+      const merged = new Map<string, NearbyUser>()
+      for (const user of [...rpcUsers, ...fallbackUsers]) {
+        merged.set(user.id, { ...merged.get(user.id), ...user })
       }
 
-      return users
+      return Array.from(merged.values())
     } catch (error) {
       console.error("[mapService] findNearbyUsers error:", error)
       return this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
@@ -115,10 +137,6 @@ export const mapService = {
       query = query.neq("id", authUser.id)
     }
 
-    if (filters?.availableNow) {
-      query = query.eq("availability_status", "available")
-    }
-
     const { data, error } = await query
 
     if (error) {
@@ -155,9 +173,11 @@ export const mapService = {
       }
     })
 
-    return enriched
+    const withinRadius = enriched
       .filter((user) => (Number.isFinite(user.distance) ? (user.distance ?? Infinity) <= radiusKm : true))
       .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
+
+    return applyFilters(withinRadius, filters)
   },
 }
 
