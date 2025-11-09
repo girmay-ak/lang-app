@@ -27,6 +27,13 @@ export default function AppRoot() {
   const [pendingConfirmation, setPendingConfirmation] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [showWelcome, setShowWelcome] = useState(false)
+  const [chatLaunch, setChatLaunch] = useState<{
+    conversationId: string
+    otherUserId: string
+    name: string
+    avatar: string
+    online: boolean
+  } | null>(null)
   const hasCheckedAuth = useRef(false)
   const isProcessingAuthChange = useRef(false)
   const mapAvailabilityToggleRef = useRef<(() => void) | null>(null)
@@ -436,10 +443,20 @@ export default function AppRoot() {
                 onSetFlag={() => setIsFlagModalOpen(true)}
                 onProfileModalChange={setIsProfileModalOpen}
                 onRegisterAvailabilityToggle={handleRegisterAvailabilityToggle}
+                onStartChat={(chat) => {
+                  setChatLaunch(chat)
+                  setActiveTab("chats")
+                }}
               />
             )}
             {activeTab === "feed" && <FeedView />}
-            {activeTab === "chats" && <ChatsView onChatOpenChange={setIsChatOpen} />}
+            {activeTab === "chats" && (
+              <ChatsView
+                onChatOpenChange={setIsChatOpen}
+                launchChat={chatLaunch}
+                onLaunchHandled={() => setChatLaunch(null)}
+              />
+            )}
             {activeTab === "notifications" && <NotificationsView />}
             {activeTab === "profile" && <ProfileView />}
           </>

@@ -1,15 +1,18 @@
 "use client"
+import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
+import { AnimatePresence, motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Switch } from "@/components/ui/switch"
 import { Filter, Users, Zap, X } from "lucide-react"
 import { MapboxMap } from "./mapbox-map"
 import { FilterPanel } from "./filter-panel"
 import { useMap } from "@/hooks/use-map"
 import { userService } from "@/lib/services/user-service"
+import { chatService } from "@/lib/services/chat-service"
 import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface MapUser {
   id: string
@@ -131,6 +134,10 @@ const getLanguageName = (language: string): string => {
   return LANGUAGE_NAME_MAP[key] || language.charAt(0).toUpperCase() + language.slice(1)
 }
 
+const MAPBOX_STATIC_TOKEN =
+  process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ??
+  "pk.eyJ1IjoiZ2lybWF5bmwyMSIsImEiOiJjbWgyODQ4ancxNDdqMmlxeTY2aHFkdDdqIn0.kx667AeRIVB9gDo42gLOHA"
+
 const formatDistance = (km?: number): string => {
   if (typeof km !== "number" || Number.isNaN(km)) return "—"
   if (km < 1) return `${Math.round(km * 1000)}m`
@@ -141,9 +148,16 @@ interface MapViewProps {
   onSetFlag: () => void
   onProfileModalChange?: (isOpen: boolean) => void
   onRegisterAvailabilityToggle?: (toggle: (() => void) | null) => void
+  onStartChat?: (chat: {
+    conversationId: string
+    otherUserId: string
+    name: string
+    avatar: string
+    online: boolean
+  }) => void
 }
 
-export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilityToggle }: MapViewProps) {
+export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilityToggle, onStartChat }: MapViewProps) {
   const [selectedUser, setSelectedUser] = useState<MapUser | null>(null)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false)
@@ -153,9 +167,15 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   const [tempAvailabilityDuration, setTempAvailabilityDuration] = useState<number>(60)
   const [isSavingAvailability, setIsSavingAvailability] = useState(false)
   const [availabilityError, setAvailabilityError] = useState<string | null>(null)
+  const [connectMessage, setConnectMessage] = useState("")
+  const [connectError, setConnectError] = useState<string | null>(null)
+  const [isConnecting, setIsConnecting] = useState(false)
   const [filterDistance, setFilterDistance] = useState(25)
   const [filterAvailableNow, setFilterAvailableNow] = useState(false)
   const [filterSkillLevel, setFilterSkillLevel] = useState<string[]>([])
+  const [currentCity, setCurrentCity] = useState<string | null>(null)
+
+  const { toast } = useToast()
 
   const {
     users: nearbyUsers,
@@ -169,6 +189,27 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     languages: [],
     skillLevel: filterSkillLevel,
   })
+
+  useEffect(() => {
+    let isMounted = true
+    userService
+      .getCurrentUser()
+      .then((user) => {
+        if (!isMounted) return
+        const normalizedCity = user?.city?.trim()
+        setCurrentCity(normalizedCity && normalizedCity.length > 0 ? normalizedCity : null)
+      })
+      .catch((error) => {
+        console.warn("[MapView] Failed to fetch current city:", error)
+        if (isMounted) {
+          setCurrentCity(null)
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const mapUsers = useMemo<MapUser[]>(() => {
     return nearbyUsers.map((dbUser) => {
@@ -241,6 +282,14 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     lat: FALLBACK_CITY_CENTER.latitude,
     lng: FALLBACK_CITY_CENTER.longitude,
   }
+  const displayCity = currentCity ?? "Den Haag"
+  const mapPreviewUrl = useMemo(() => {
+    if (!effectiveUserLocation || !MAPBOX_STATIC_TOKEN) return null
+    const { lat, lng } = effectiveUserLocation
+    const formattedLat = Number.isFinite(lat) ? lat.toFixed(6) : FALLBACK_CITY_CENTER.latitude.toFixed(6)
+    const formattedLng = Number.isFinite(lng) ? lng.toFixed(6) : FALLBACK_CITY_CENTER.longitude.toFixed(6)
+    return `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+38bdf8(${formattedLng},${formattedLat})/${formattedLng},${formattedLat},13,0/480x240@2x?access_token=${MAPBOX_STATIC_TOKEN}`
+  }, [effectiveUserLocation])
 
   useEffect(() => {
     if (!onRegisterAvailabilityToggle) return
@@ -273,11 +322,19 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   const handleUserSelect = (user: MapUser | null) => {
     setSelectedUser(user)
     onProfileModalChange?.(user !== null)
+    setConnectMessage("")
+    setConnectError(null)
   }
 
   const durationOptions = [30, 60, 90, 120] as const
 
+  const handleToggleAvailability = () => {
+    if (isSavingAvailability) return
+    setTempIsAvailable((prev) => !prev)
+  }
+
   const handleSaveAvailability = async () => {
+    const wasAvailable = isAvailable
     setAvailabilityError(null)
     setIsSavingAvailability(true)
     try {
@@ -297,12 +354,62 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       setAvailabilityDuration(tempAvailabilityDuration)
       setFilterAvailableNow(tempIsAvailable)
       setIsAvailabilityModalOpen(false)
+      if (tempIsAvailable && !wasAvailable) {
+        toast({
+          title: "You’re now live",
+          description: `Learners nearby in ${displayCity} can see you for the next ${tempAvailabilityDuration} minutes.`,
+        })
+      }
       await refetch()
     } catch (error: any) {
       console.error("[MapView] Availability update error:", error)
       setAvailabilityError(error?.message ?? "Failed to update availability. Please try again.")
     } finally {
       setIsSavingAvailability(false)
+    }
+  }
+
+  const handleConnectAndChat = async () => {
+    if (!selectedUser || isConnecting) return
+
+    setConnectError(null)
+    setIsConnecting(true)
+
+    try {
+      const supabase = createClient()
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      if (sessionError) throw sessionError
+      if (!session?.user) {
+        throw new Error("Please sign in again to start a conversation.")
+      }
+
+      const conversation = await chatService.createOrGetConversation(selectedUser.id)
+
+      const messageContent = connectMessage.trim()
+      if (messageContent) {
+        await chatService.sendMessage(conversation.id, messageContent, "text")
+      }
+
+      onStartChat?.({
+        conversationId: conversation.id,
+        otherUserId: selectedUser.id,
+        name: selectedUser.name,
+        avatar: selectedUser.image || "/placeholder-user.jpg",
+        online: selectedUser.isOnline,
+      })
+
+      setConnectMessage("")
+      setSelectedUser(null)
+      onProfileModalChange?.(false)
+    } catch (error: any) {
+      console.error("[MapView] Failed to start chat:", error)
+      setConnectError(error?.message ?? "We couldn’t start the chat. Please try again.")
+    } finally {
+      setIsConnecting(false)
     }
   }
 
@@ -542,9 +649,19 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                 </div>
               </div>
 
-              <div className="sticky bottom-0 bg-white pt-4 pb-2 border-t border-gray-100">
+              <div className="sticky bottom-0 bg-white pt-4 pb-4 border-t border-gray-100 space-y-3">
+                {connectError && (
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-600">
+                    {connectError}
+                  </div>
+                )}
                 <div className="flex items-center gap-3 bg-gray-100 rounded-full px-4 py-3">
-                  <button className="text-gray-500 hover:text-gray-700">
+                  <button
+                    type="button"
+                    className="text-gray-500 hover:text-gray-700 transition disabled:opacity-40"
+                    disabled
+                    aria-label="Attachments coming soon"
+                  >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="24"
@@ -563,14 +680,37 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                   </button>
                   <input
                     type="text"
-                    placeholder="Message"
+                    placeholder="Say hi and suggest a chat..."
+                    value={connectMessage}
+                    onChange={(event) => setConnectMessage(event.target.value)}
                     className="flex-1 bg-transparent outline-none text-gray-700 placeholder:text-gray-400"
+                    disabled={isConnecting}
                   />
-                  <button className="text-gray-500 hover:text-gray-700">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:bg-emerald-600 disabled:opacity-70"
+                    onClick={handleConnectAndChat}
+                    disabled={isConnecting}
+                  >
+                    {isConnecting ? (
+                      <svg
+                        className="h-4 w-4 animate-spin"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                        />
+                      </svg>
+                    ) : (
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
-                      width="24"
-                      height="24"
+                        width="20"
+                        height="20"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -582,11 +722,9 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                       <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                       <line x1="12" x2="12" y1="19" y2="22" />
                     </svg>
+                    )}
+                    <span>{isConnecting ? "Connecting…" : "Send & chat"}</span>
                   </button>
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src="/placeholder.svg" alt="You" />
-                    <AvatarFallback className="bg-blue-500 text-white text-xs">Y</AvatarFallback>
-                  </Avatar>
                 </div>
               </div>
             </div>

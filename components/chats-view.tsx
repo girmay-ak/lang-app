@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,7 @@ import { Search, Loader2 } from "lucide-react"
 import { ChatConversation } from "./chat-conversation"
 import { createClient } from "@/lib/supabase/client"
 import { formatDistanceToNow } from "date-fns"
+import { chatService } from "@/lib/services/chat-service"
 
 interface Chat {
   id: string
@@ -20,6 +21,7 @@ interface Chat {
   unread?: boolean
   isGroup?: boolean
   badges?: { label: string; variant: "default" | "secondary" | "destructive" }[]
+  otherUserId: string
 }
 
 interface Conversation {
@@ -40,105 +42,166 @@ interface Conversation {
 
 interface ChatsViewProps {
   onChatOpenChange?: (isOpen: boolean) => void
+  launchChat?: {
+    conversationId: string
+    otherUserId: string
+    name: string
+    avatar: string
+    online: boolean
+  } | null
+  onLaunchHandled?: () => void
 }
 
-export function ChatsView({ onChatOpenChange }: ChatsViewProps) {
+export function ChatsView({ onChatOpenChange, launchChat, onLaunchHandled }: ChatsViewProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
   const [chats, setChats] = useState<Chat[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [requests, setRequests] = useState<Array<{ id: string; avatar: string }>>([])
 
-  useEffect(() => {
-    async function fetchChats() {
-      try {
-        setIsLoading(true)
-        const supabase = createClient()
-        
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        
-        if (!session) {
-          setIsLoading(false)
-          return
-        }
+  const loadChats = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const supabase = createClient()
 
-        const userId = session.user.id
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
-        // Fetch conversations where user is participant
-        const { data: conversations, error } = await supabase
-          .from("conversations")
-          .select(`
-            id,
-            user1_id,
-            user2_id,
-            last_message,
-            last_message_at,
-            user1_unread_count,
-            user2_unread_count,
-            user1:users!conversations_user1_id_fkey(id, full_name, avatar_url, is_online),
-            user2:users!conversations_user2_id_fkey(id, full_name, avatar_url, is_online)
-          `)
-          .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
-          .order("last_message_at", { ascending: false, nullsLast: true })
-
-        if (error) {
-          // Supabase errors need to be parsed from JSON string
-          let errorData: any = {}
-          try {
-            const errorJson = JSON.stringify(error, null, 2)
-            errorData = JSON.parse(errorJson)
-            console.error("[v0] Error fetching conversations:", {
-              message: errorData.message || "Unknown error",
-              code: errorData.code || "unknown",
-              details: errorData.details || null,
-              hint: errorData.hint || null,
-            })
-          } catch (e) {
-            // Fallback if stringify/parse fails
-            console.error("[v0] Error fetching conversations:", error)
-          }
-          setIsLoading(false)
-          return
-        }
-
-        // Format conversations into chat list
-        const formattedChats: Chat[] = (conversations || []).map((conv: any) => {
-          const otherUserId = conv.user1_id === userId ? conv.user2_id : conv.user1_id
-          const otherUser = conv.user1_id === userId ? conv.user2 : conv.user1
-          const unreadCount = conv.user1_id === userId ? conv.user1_unread_count : conv.user2_unread_count
-          
-          return {
-            id: conv.id,
-            name: otherUser?.full_name || "Unknown User",
-            avatar: otherUser?.avatar_url || "/placeholder-user.jpg",
-            lastMessage: conv.last_message || "No messages yet",
-            timeAgo: conv.last_message_at 
-              ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true })
-              : "Never",
-            online: otherUser?.is_online || false,
-            unread: unreadCount > 0,
-          }
-        })
-
-        setChats(formattedChats)
-
-        // Fetch friend requests (placeholder - you can implement this based on your schema)
-        // For now, using empty array
-        setRequests([])
-      } catch (error) {
-        console.error("[v0] Error loading chats:", {
-          message: error instanceof Error ? error.message : String(error),
-          error: error instanceof Error ? error.stack : JSON.stringify(error, Object.getOwnPropertyNames(error))
-        })
-      } finally {
+      if (!session) {
         setIsLoading(false)
+        return
+      }
+
+      const userId = session.user.id
+
+      const { data: conversations, error } = await supabase
+        .from("conversations")
+        .select(`
+          id,
+          user1_id,
+          user2_id,
+          last_message,
+          last_message_at,
+          user1_unread_count,
+          user2_unread_count,
+          user1:users!conversations_user1_id_fkey(id, full_name, avatar_url, is_online),
+          user2:users!conversations_user2_id_fkey(id, full_name, avatar_url, is_online)
+        `)
+        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+        .order("last_message_at", { ascending: false, nullsLast: true })
+
+      if (error) {
+        let errorData: any = {}
+        try {
+          const errorJson = JSON.stringify(error, null, 2)
+          errorData = JSON.parse(errorJson)
+          console.error("[v0] Error fetching conversations:", {
+            message: errorData.message || "Unknown error",
+            code: errorData.code || "unknown",
+            details: errorData.details || null,
+            hint: errorData.hint || null,
+          })
+        } catch (e) {
+          console.error("[v0] Error fetching conversations:", error)
+        }
+        setIsLoading(false)
+        return
+      }
+
+      const formattedChats: Chat[] = (conversations || []).map((conv: any) => {
+        const otherUserId = conv.user1_id === userId ? conv.user2_id : conv.user1_id
+        const otherUser = conv.user1_id === userId ? conv.user2 : conv.user1
+        const unreadCount = conv.user1_id === userId ? conv.user1_unread_count : conv.user2_unread_count
+
+        return {
+          id: conv.id,
+          name: otherUser?.full_name || "Unknown User",
+          avatar: otherUser?.avatar_url || "/placeholder-user.jpg",
+          lastMessage: conv.last_message || "No messages yet",
+          timeAgo: conv.last_message_at
+            ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true })
+            : "Never",
+          online: otherUser?.is_online || false,
+          unread: unreadCount > 0,
+          otherUserId,
+        }
+      })
+
+      setChats(formattedChats)
+      setRequests([])
+    } catch (error) {
+      console.error("[v0] Error loading chats:", {
+        message: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.stack : JSON.stringify(error, Object.getOwnPropertyNames(error)),
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadChats()
+  }, [loadChats])
+
+  useEffect(() => {
+    if (!launchChat) return
+    let cancelled = false
+
+    async function openChat() {
+      try {
+        const preview = await chatService.getConversationPreview(launchChat.conversationId)
+        if (cancelled) return
+
+        const chatData: Chat = preview
+          ? {
+              id: preview.id,
+              name: preview.name,
+              avatar: preview.avatar || "/placeholder-user.jpg",
+              lastMessage: preview.lastMessage || "Say hello to start chatting!",
+              timeAgo: preview.lastMessageAt
+                ? formatDistanceToNow(new Date(preview.lastMessageAt), { addSuffix: true })
+                : "Just now",
+              online: preview.online,
+              unread: (preview.unreadCount ?? 0) > 0,
+              otherUserId: preview.otherUserId,
+            }
+          : {
+              id: launchChat.conversationId,
+              name: launchChat.name,
+              avatar: launchChat.avatar || "/placeholder-user.jpg",
+              lastMessage: "Say hello to start chatting!",
+              timeAgo: "Just now",
+              online: launchChat.online,
+              unread: false,
+              otherUserId: launchChat.otherUserId,
+            }
+
+        setChats((prev) => {
+          const existingIndex = prev.findIndex((chat) => chat.id === chatData.id)
+          if (existingIndex !== -1) {
+            const updated = [...prev]
+            updated[existingIndex] = { ...chatData, unread: prev[existingIndex].unread }
+            return updated
+          }
+          return [chatData, ...prev]
+        })
+
+        setSelectedChat(chatData)
+        onChatOpenChange?.(true)
+      } catch (error) {
+        console.error("[ChatsView] Failed to open chat:", error)
+      } finally {
+        onLaunchHandled?.()
       }
     }
 
-    fetchChats()
-  }, [])
+    openChat()
+
+    return () => {
+      cancelled = true
+    }
+  }, [launchChat, onChatOpenChange, onLaunchHandled])
 
   const handleChatSelect = (chat: Chat) => {
     setSelectedChat(chat)
