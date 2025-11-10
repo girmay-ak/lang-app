@@ -51,8 +51,6 @@ export function ProfileCarousel({
     ]
   }, [profiles, activeIndex])
 
-  const centerProfile = items.find((item) => item.offset === 0)?.profile
-
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (event.key === "ArrowLeft") {
@@ -71,12 +69,13 @@ export function ProfileCarousel({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [handleKeyDown])
 
+  const centerProfile = items.find((item) => item.offset === 0)?.profile
+  const centerX = useMotionValue(0)
+  const rotateY = useTransform(centerX, [-220, 0, 220], ["15deg", "0deg", "-15deg"])
+
   if (!centerProfile) {
     return null
   }
-
-  const centerX = useMotionValue(0)
-  const rotateY = useTransform(centerX, [-220, 0, 220], ["15deg", "0deg", "-15deg"])
 
   const handleDragEnd = (_: MouseEvent | TouchEvent | PointerEvent, info: { offset: { x: number } }) => {
     if (info.offset.x > 140) {
