@@ -880,8 +880,8 @@ export function ProfileCard({
 
   return (
     <div
-      className="fixed inset-0 z-[2600] flex min-h-screen items-center justify-center px-4 py-10"
-      style={{ background: "hsla(var(--profile-bg),0.92)", backdropFilter: "blur(24px)", ...PROFILE_TOKENS }}
+      className="fixed inset-0 z-[2600] flex min-h-screen items-start justify-center overflow-y-auto px-4 py-8 sm:py-10 lg:items-center"
+      style={{ background: "hsla(var(--profile-bg),0.92)", backdropFilter: "blur(24px)", touchAction: "pan-y", ...PROFILE_TOKENS }}
       onClick={handleClose}
     >
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
