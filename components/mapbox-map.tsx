@@ -270,6 +270,16 @@ export function MapboxMap({
         return
       }
 
+      const compositeSource: any = mapStyle.sources?.composite
+      const hasBuildingLayer =
+        compositeSource?.vector_layers?.some?.(
+          (layer: { id?: string }) => layer?.id === "building" || layer?.id === "building-outline",
+        ) ?? false
+
+      if (!hasBuildingLayer) {
+        return
+      }
+
       const { layers } = mapStyle
       let labelLayerId
       for (let i = 0; i < layers.length; i += 1) {

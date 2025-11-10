@@ -1,11 +1,19 @@
 "use client"
 
-import { useRef, useState, useEffect } from "react"
+import dynamic from "next/dynamic"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowRight, Globe2, MessageSquare, Sparkles, UsersRound, Play, Check, Star, Download, MapPin, Coffee, Trophy, Zap, TrendingUp, Radio, Map, Gamepad2, Camera, Gift, X, MessageCircle, Award, Shield, Clock, Smartphone, Languages, MessageSquareText } from "lucide-react"
 
 import { AnimatedBeam } from "@/components/ui/animated-beam"
-import { HyperspeedBackground } from "@/components/marketing/hyperspeed-background"
+
+const HyperspeedBackground = dynamic(
+  () =>
+    import("@/components/marketing/hyperspeed-background").then(
+      (mod) => mod.HyperspeedBackground,
+    ),
+  { ssr: false },
+)
 
 const hyperspeedEffectOptions = {
   distortion: "lightTunnel",

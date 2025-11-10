@@ -77,7 +77,6 @@ export function ProfileCarousel({
 
   const centerX = useMotionValue(0)
   const rotateY = useTransform(centerX, [-220, 0, 220], ["15deg", "0deg", "-15deg"])
-  const tilt = useTransform(centerX, [-220, 0, 220], ["8px", "0px", "8px"])
 
   const handleDragEnd = (_: MouseEvent | TouchEvent | PointerEvent, info: { offset: { x: number } }) => {
     if (info.offset.x > 140) {
@@ -101,18 +100,22 @@ export function ProfileCarousel({
               <motion.button
                 key={item.profile.id}
                 type="button"
-                className={`group absolute hidden h-[170px] w-[170px] -translate-y-6 items-center justify-center rounded-[32px] border border-white/10 bg-gradient-to-br from-white/5 to-white/0 shadow-[0_18px_40px_rgba(10,14,35,0.45)] backdrop-blur xl:flex ${
+                className={`group absolute hidden h-[170px] w-[170px] -translate-y-6 items-center justify-center rounded-[32px] border border-white/10 bg-gradient-to-br from-white/5 to-white/0 shadow-[0_18px_40px_rgba(10,14,35,0.45)] backdrop-blur filter blur-sm hover:blur-0 xl:flex ${
                   isLeft ? "-left-12" : "-right-12"
                 }`}
                 onClick={() => onSelect(item.index)}
-                initial={{ scale: 0.4, opacity: 0.4, filter: "blur(4px)" }}
-                animate={{ scale: 0.52, opacity: 0.55, filter: "blur(2px)" }}
-                whileHover={{ scale: 0.6, opacity: 0.8, filter: "blur(0px)" }}
+                initial={{ scale: 0.4, opacity: 0.4 }}
+                animate={{ scale: 0.52, opacity: 0.55 }}
+                whileHover={{ scale: 0.6, opacity: 0.8 }}
                 transition={{ type: "spring", stiffness: 220, damping: 20 }}
               >
                 <div className="flex flex-col items-center gap-3 text-white/80">
-                  <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-slate-700 to-slate-900 shadow-[0_12px_30px_rgba(8,8,16,0.65)]">
-                    <span className="text-2xl">{item.profile.avatar ?? item.profile.flag ?? "👤"}</span>
+                  <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-slate-700 to-slate-900 shadow-[0_12px_30px_rgba(8,8,16,0.65)]">
+                    {item.profile.avatarUrl ? (
+                      <img src={item.profile.avatarUrl} alt={item.profile.displayName} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-2xl">{item.profile.avatar ?? item.profile.flag ?? "👤"}</span>
+                    )}
                     <div className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-white/10 ring-offset-4 ring-offset-black/20" />
                   </div>
                   <div className="text-center text-xs font-semibold uppercase tracking-[0.3em] text-white/40">Preview</div>
@@ -129,7 +132,7 @@ export function ProfileCarousel({
             custom={direction}
             drag="x"
             dragConstraints={{ left: 0, right: 0 }}
-            style={{ x: centerX, rotateY, boxShadow: tilt }}
+            style={{ x: centerX, rotateY }}
             onDragEnd={handleDragEnd}
             initial={{ x: direction === 0 ? 0 : direction > 0 ? 220 : -220, scale: 0.8, opacity: 0, rotateY: direction > 0 ? -20 : 20 }}
             animate={{ x: 0, scale: 1, opacity: 1, rotateY: 0 }}
