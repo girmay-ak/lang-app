@@ -30,6 +30,18 @@ export interface ConversationRecord {
   updated_at: string
 }
 
+export interface ConversationSummary {
+  conversationId: string
+  otherUserId: string
+  name: string
+  avatar: string | null
+  online: boolean
+  lastMessage: string | null
+  lastMessageAt: string | null
+  unreadCount: number
+  isRequest?: boolean
+}
+
 export const chatService = {
   async getCurrentUserId(): Promise<string | null> {
     const supabase = createClient()
@@ -312,6 +324,60 @@ export const chatService = {
       lastMessage: data.last_message,
       lastMessageAt: data.last_message_at,
       unreadCount: unreadCount ?? 0,
+    }
+  },
+
+  async getConversationSummaries(): Promise<ConversationSummary[]> {
+    try {
+      const supabase = createClient()
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return []
+
+      const { data, error } = await supabase
+        .from("conversations")
+        .select(
+          `
+          id,
+          user1_id,
+          user2_id,
+          last_message,
+          last_message_at,
+          unread_count_user1,
+          unread_count_user2,
+          status,
+          user1:users!conversations_user1_id_fkey(id, full_name, avatar_url, is_online),
+          user2:users!conversations_user2_id_fkey(id, full_name, avatar_url, is_online)
+        `,
+        )
+        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+        .order("updated_at", { ascending: false })
+
+      if (error) throw error
+
+      return (data ?? []).map((record: any) => {
+        const isUser1 = record.user1_id === user.id
+        const otherUser = isUser1 ? record.user2 : record.user1
+        const unreadCount = isUser1 ? record.unread_count_user1 : record.unread_count_user2
+
+        return {
+          conversationId: record.id,
+          otherUserId: otherUser?.id ?? (isUser1 ? record.user2_id : record.user1_id),
+          name: otherUser?.full_name ?? "Language Partner",
+          avatar: otherUser?.avatar_url ?? null,
+          online: Boolean(otherUser?.is_online),
+          lastMessage: record.last_message,
+          lastMessageAt: record.last_message_at,
+          unreadCount: typeof unreadCount === "number" ? unreadCount : 0,
+          isRequest: record.status ? record.status === "pending" : false,
+        } satisfies ConversationSummary
+      })
+    } catch (error) {
+      console.error("[chatService] getConversationSummaries error:", error)
+      return []
     }
   },
 }

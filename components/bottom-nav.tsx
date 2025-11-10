@@ -1,15 +1,27 @@
-"use client"
+"use client";
 
-import { MessageSquare, Map, Bell, Plus, User } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { MessageSquare, Map, Bell, Plus, User } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface BottomNavProps {
-  activeTab: "map" | "chats" | "notifications" | "profile"
-  onTabChange: (tab: "map" | "chats" | "notifications" | "profile") => void
-  onNewExchange?: () => void
+  activeTab: "map" | "chats" | "notifications" | "profile";
+  onTabChange: (tab: "map" | "chats" | "notifications" | "profile") => void;
+  onNewExchange?: () => void;
+  chatBadgeCount?: number;
+  notificationBadgeCount?: number;
 }
 
-export function BottomNav({ activeTab, onTabChange, onNewExchange }: BottomNavProps) {
+export function BottomNav({
+  activeTab,
+  onTabChange,
+  onNewExchange,
+  chatBadgeCount = 0,
+  notificationBadgeCount = 0,
+}: BottomNavProps) {
+  const showChatBadge = Number.isFinite(chatBadgeCount) && chatBadgeCount > 0;
+  const showNotificationBadge =
+    Number.isFinite(notificationBadgeCount) && notificationBadgeCount > 0;
+
   return (
     <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md">
       <div className="relative">
@@ -19,8 +31,10 @@ export function BottomNav({ activeTab, onTabChange, onNewExchange }: BottomNavPr
             <button
               onClick={() => onTabChange("map")}
               className={cn(
-                "flex items-center justify-center transition-all",
-                activeTab === "map" ? "text-blue-400" : "text-slate-400 hover:text-slate-300",
+                "relative flex items-center justify-center transition-all",
+                activeTab === "map"
+                  ? "text-blue-400"
+                  : "text-slate-400 hover:text-slate-300",
               )}
               aria-label="Explore"
             >
@@ -30,12 +44,19 @@ export function BottomNav({ activeTab, onTabChange, onNewExchange }: BottomNavPr
             <button
               onClick={() => onTabChange("chats")}
               className={cn(
-                "flex items-center justify-center transition-all",
-                activeTab === "chats" ? "text-blue-400" : "text-slate-400 hover:text-slate-300",
+                "relative flex items-center justify-center transition-all",
+                activeTab === "chats"
+                  ? "text-blue-400"
+                  : "text-slate-400 hover:text-slate-300",
               )}
               aria-label="Chats"
             >
               <MessageSquare className="h-6 w-6" strokeWidth={1.5} />
+              {showChatBadge && (
+                <span className="absolute -top-1.5 -right-1.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-500 px-1 text-[11px] font-semibold text-white shadow-lg">
+                  {chatBadgeCount > 99 ? "99+" : chatBadgeCount}
+                </span>
+              )}
             </button>
 
             {/* Center spacer for elevated button */}
@@ -44,23 +65,28 @@ export function BottomNav({ activeTab, onTabChange, onNewExchange }: BottomNavPr
             <button
               onClick={() => onTabChange("notifications")}
               className={cn(
-                "flex items-center justify-center transition-all relative",
-                activeTab === "notifications" ? "text-blue-400" : "text-slate-400 hover:text-slate-300",
+                "relative flex items-center justify-center transition-all",
+                activeTab === "notifications"
+                  ? "text-blue-400"
+                  : "text-slate-400 hover:text-slate-300",
               )}
               aria-label="Notifications"
             >
               <Bell className="h-6 w-6" strokeWidth={1.5} />
-              {/* Notification badge */}
-              <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs font-semibold rounded-full h-5 w-5 flex items-center justify-center">
-                5
-              </span>
+              {showNotificationBadge && (
+                <span className="absolute -top-1.5 -right-1.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-blue-500 px-1 text-[11px] font-semibold text-white shadow-lg">
+                  {notificationBadgeCount > 99 ? "99+" : notificationBadgeCount}
+                </span>
+              )}
             </button>
 
             <button
               onClick={() => onTabChange("profile")}
               className={cn(
                 "flex items-center justify-center transition-all",
-                activeTab === "profile" ? "text-blue-400" : "text-slate-400 hover:text-slate-300",
+                activeTab === "profile"
+                  ? "text-blue-400"
+                  : "text-slate-400 hover:text-slate-300",
               )}
               aria-label="Profile"
             >
@@ -78,5 +104,5 @@ export function BottomNav({ activeTab, onTabChange, onNewExchange }: BottomNavPr
         </button>
       </div>
     </nav>
-  )
+  );
 }

@@ -1,147 +1,249 @@
-"use client";
-import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+"use client"
+import Image from "next/image"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion"
+import { Button } from "@/components/ui/button"
 import {
-  AlertCircle,
-  ArrowLeft,
   CalendarCheck,
-  Heart,
-  Loader2,
-  MapPin,
-  MessageCircle,
-  Mic,
-  Send,
-  Smile,
-  Sparkles,
   Filter,
+  MessageCircle,
+  Smile,
   Users,
   Zap,
   X,
-} from "lucide-react";
-import { MapboxMap, type MapFilter, type MapPoi } from "./mapbox-map";
-import { FilterPanel } from "./filter-panel";
-import { useMap } from "@/hooks/use-map";
-import { userService, type UserRecord } from "@/lib/services/user-service";
-import { chatService } from "@/lib/services/chat-service";
-import { createClient } from "@/lib/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
+} from "lucide-react"
+import { MapboxMap, type MapFilter, type MapPoi } from "./mapbox-map"
+import {
+  ProfileCard,
+  type ProfileAvailabilityInfo,
+  type ProfileCardProfile,
+  type ProfileLanguageCard,
+  type ProfileStatCard,
+} from "./profile-card"
+import { FilterPanel } from "./filter-panel"
+import { useMap } from "@/hooks/use-map"
+import { userService, type UserRecord } from "@/lib/services/user-service"
+import { chatService } from "@/lib/services/chat-service"
+import { connectionService } from "@/lib/services/connection-service"
+import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
+import { Textarea } from "@/components/ui/textarea"
+import { Slider } from "@/components/ui/slider"
 
 interface MapUser {
-  id: string;
-  name: string;
-  language: string;
-  flag: string;
-  nativeFlag?: string;
-  distance: string;
-  lat: number;
-  lng: number;
-  bio: string;
-  availableFor: string;
-  image: string;
-  isOnline: boolean;
-  rating: number;
-  responseTime: string;
-  currentLocation: string;
-  availableNow: boolean;
-  timePreference: string;
-  languagesSpoken: { language: string; flag: string; level: string }[];
-  isFallbackLocation?: boolean;
-  availabilityMessage?: string | null;
-  availabilityEmoji?: string | null;
-  isViewer?: boolean;
+  id: string
+  name: string
+  language: string
+  flag: string
+  distance: string
+  lat: number
+  lng: number
+  bio: string
+  availableFor: string
+  image: string
+  isOnline: boolean
+  rating: number
+  responseTime: string
+  currentLocation: string
+  availableNow: boolean
+  timePreference: string
+  languagesSpoken: { language: string; flag: string; level: string }[]
+  primaryLanguage?: string
+  secondaryLanguage?: string
+  primaryFlag?: string
+  secondaryFlag?: string
+  matchScore?: number
+  statusIcon?: string
+  statusText?: string
+  levelGradient: { from: string; to: string; label: string }
+  languagePairLabel?: string
+  teaches?: ProfileLanguageCard[]
+  learns?: ProfileLanguageCard[]
+  stats?: ProfileStatCard[]
+  availabilityInfo?: ProfileAvailabilityInfo
+  pairFlags?: string[]
+  isFallbackLocation?: boolean
+  availabilityMessage?: string | null
+  availabilityEmoji?: string | null
+  isViewer?: boolean
 }
 
 const FALLBACK_CITY_CENTER = {
   latitude: 52.0705,
   longitude: 4.3007,
-};
+}
 
 const DEN_HAAG_BOUNDS = {
   north: 52.125,
   south: 52.025,
   east: 4.41,
   west: 4.235,
-};
+}
 
-const AVAILABILITY_EMOJIS = ["☕", "🧋", "💬", "🎧", "🏖"] as const;
+const AVAILABILITY_EMOJIS = ["☕", "🧋", "💬", "🎧", "🏖"] as const
 
-const MAP_FILTERS: Array<{
-  id: MapFilter;
-  icon: string;
-  label: string;
-  hint: string;
-}> = [
-  {
-    id: "people",
-    icon: "👥",
-    label: "People",
-    hint: "Nearby language partners",
-  },
+const MAP_FILTERS: Array<{ id: MapFilter; icon: string; label: string; hint: string }> = [
+  { id: "people", icon: "👥", label: "People", hint: "Nearby language partners" },
   { id: "places", icon: "🏪", label: "Places", hint: "Cafés & schools" },
-  {
-    id: "events",
-    icon: "📅",
-    label: "Events",
-    hint: "Pop-up exchange sessions",
-  },
-  {
-    id: "highlights",
-    icon: "⭐",
-    label: "Highlights",
-    hint: "Live meetups & available friends",
-  },
-];
+  { id: "events", icon: "📅", label: "Events", hint: "Pop-up exchange sessions" },
+  { id: "highlights", icon: "⭐", label: "Highlights", hint: "Live meetups & available friends" },
+]
 
 const toPositiveHash = (value: string) => {
-  let hash = 0;
+  let hash = 0
   for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0
   }
-  return hash;
-};
+  return hash
+}
 
-const generateDenHaagCoordinate = (
-  userId: string,
-  axis: "lat" | "lng",
-  offset: number,
-) => {
-  const hash = toPositiveHash(`${userId}-${axis}-${offset}`);
-  const normalized = (hash % 10000) / 10000;
+const generateDenHaagCoordinate = (userId: string, axis: "lat" | "lng", offset: number) => {
+  const hash = toPositiveHash(`${userId}-${axis}-${offset}`)
+  const normalized = (hash % 10000) / 10000
 
   if (axis === "lat") {
-    return (
-      DEN_HAAG_BOUNDS.south +
-      (DEN_HAAG_BOUNDS.north - DEN_HAAG_BOUNDS.south) * normalized
-    );
+    return DEN_HAAG_BOUNDS.south + (DEN_HAAG_BOUNDS.north - DEN_HAAG_BOUNDS.south) * normalized
   }
 
-  return (
-    DEN_HAAG_BOUNDS.west +
-    (DEN_HAAG_BOUNDS.east - DEN_HAAG_BOUNDS.west) * normalized
-  );
-};
+  return DEN_HAAG_BOUNDS.west + (DEN_HAAG_BOUNDS.east - DEN_HAAG_BOUNDS.west) * normalized
+}
 
-const resolveUserCoordinates = (
-  userId: string,
-  latitude?: number | null,
-  longitude?: number | null,
-) => {
+const resolveUserCoordinates = (userId: string, latitude?: number | null, longitude?: number | null) => {
   if (typeof latitude === "number" && typeof longitude === "number") {
-    return { latitude, longitude, isFallback: false };
+    return { latitude, longitude, isFallback: false }
   }
 
   return {
     latitude: generateDenHaagCoordinate(userId, "lat", 1),
     longitude: generateDenHaagCoordinate(userId, "lng", 2),
     isFallback: true,
-  };
-};
+  }
+}
+
+const LEVEL_ALIAS: Record<string, string> = {
+  native: "native",
+  fluent: "advanced",
+  proficient: "advanced",
+  advanced: "advanced",
+  upper_intermediate: "intermediate",
+  intermediate: "intermediate",
+  elementary: "beginner",
+  beginner: "beginner",
+  novice: "beginner",
+  learning: "beginner",
+  basic: "beginner",
+}
+
+const LEVEL_PRIORITY: Record<string, number> = {
+  native: 4,
+  advanced: 3,
+  intermediate: 2,
+  beginner: 1,
+}
+
+const LEVEL_GRADIENT: Record<string, { from: string; to: string; label: string }> = {
+  native: { from: "#a855f7", to: "#6366f1", label: "Native" },
+  advanced: { from: "#f43f5e", to: "#be123c", label: "Advanced" },
+  intermediate: { from: "#facc15", to: "#f97316", label: "Intermediate" },
+  beginner: { from: "#34d399", to: "#10b981", label: "Beginner" },
+}
+
+const DEFAULT_LEVEL_GRADIENT = { from: "#64748b", to: "#1e293b", label: "Explorer" }
+
+const normalizeLevelKey = (value?: string | null) => {
+  if (!value) return "beginner"
+  const normalized = value.toString().toLowerCase().replace(/\s+/g, "_")
+  return LEVEL_ALIAS[normalized] ?? normalized
+}
+
+const resolveLevelGradient = (level?: string | null) => {
+  const key = normalizeLevelKey(level)
+  return LEVEL_GRADIENT[key] ?? DEFAULT_LEVEL_GRADIENT
+}
+
+const computeMatchScore = (
+  userLanguages: Array<{ language: string; levelKey: string }>,
+  viewerLanguages: Array<{ language: string }>,
+  distance?: number | null,
+) => {
+  const userSet = new Set(userLanguages.map((badge) => badge.language.toLowerCase()))
+  const viewerSet = new Set(viewerLanguages.map((badge) => badge.language.toLowerCase()))
+
+  const overlapCount = [...userSet].filter((language) => viewerSet.has(language)).length
+
+  const distanceScore =
+    typeof distance === "number" && Number.isFinite(distance)
+      ? Math.max(0, 18 - Math.min(distance, 18))
+      : 8
+
+  let score = 52 + Math.round(distanceScore)
+  if (overlapCount > 0) {
+    score += overlapCount * 12
+  } else {
+    score -= Math.max(0, viewerSet.size - overlapCount) * 4
+  }
+
+  const nativeOverlap = userLanguages.some(
+    (badge) => badge.levelKey === "native" && viewerSet.has(badge.language.toLowerCase()),
+  )
+  if (nativeOverlap) {
+    score += 6
+  }
+
+  return Math.min(97, Math.max(40, score))
+}
+
+const resolveStatusMeta = ({
+  availableNow,
+  availabilityEmoji,
+  availabilityMessage,
+  currentLocation,
+  secondaryLanguage,
+  primaryLanguage,
+  timeLeftLabel,
+}: {
+  availableNow: boolean
+  availabilityEmoji?: string | null
+  availabilityMessage?: string | null
+  currentLocation?: string | null
+  secondaryLanguage?: string
+  primaryLanguage?: string
+  timeLeftLabel?: string
+}) => {
+  if (availableNow) {
+    return {
+      icon: "⚡",
+      text: timeLeftLabel ? `Available now (${timeLeftLabel.replace(" left", "")})` : "Available now",
+    }
+  }
+
+  const lowerMessage = availabilityMessage?.toLowerCase() ?? ""
+  if (availabilityEmoji === "☕" || /cafe|coffee|espresso|tea|latte/.test(lowerMessage)) {
+    return {
+      icon: "☕",
+      text: currentLocation ? `At ${currentLocation}` : "Cafe meetup",
+    }
+  }
+
+  if (availabilityEmoji === "🧋") {
+    return { icon: "🧋", text: "Bubble tea chat" }
+  }
+
+  if (availabilityEmoji === "🎧") {
+    return { icon: "🎧", text: "Focus session" }
+  }
+
+  if (availabilityEmoji === "🏖") {
+    return { icon: "🏖", text: "Chill vibes" }
+  }
+
+  const targetLanguage = secondaryLanguage ?? primaryLanguage ?? "practice"
+  return {
+    icon: "🎯",
+    text: `Looking for ${targetLanguage}`,
+  }
+}
+
 
 const LANGUAGE_FLAG_MAP: Record<string, string> = {
   af: "🇿🇦",
@@ -168,7 +270,7 @@ const LANGUAGE_FLAG_MAP: Record<string, string> = {
   italian: "🇮🇹",
   arabic: "🇸🇦",
   swedish: "🇸🇪",
-};
+}
 
 const LANGUAGE_NAME_MAP: Record<string, string> = {
   af: "Afrikaans",
@@ -185,146 +287,110 @@ const LANGUAGE_NAME_MAP: Record<string, string> = {
   sv: "Swedish",
   zh: "Chinese",
   "zh-tw": "Chinese (Traditional)",
-};
+}
 
 const getLanguageFlag = (language: string): string => {
-  if (!language) return "🌍";
-  const key = language.toLowerCase();
-  return LANGUAGE_FLAG_MAP[key] || LANGUAGE_FLAG_MAP[key.slice(0, 2)] || "🌍";
-};
+  if (!language) return "🌍"
+  const key = language.toLowerCase()
+  return LANGUAGE_FLAG_MAP[key] || LANGUAGE_FLAG_MAP[key.slice(0, 2)] || "🌍"
+}
 
 const getLanguageName = (language: string): string => {
-  if (!language) return "Language";
-  const key = language.toLowerCase();
-  return (
-    LANGUAGE_NAME_MAP[key] ||
-    language.charAt(0).toUpperCase() + language.slice(1)
-  );
-};
+  if (!language) return "Language"
+  const key = language.toLowerCase()
+  return LANGUAGE_NAME_MAP[key] || language.charAt(0).toUpperCase() + language.slice(1)
+}
 
 const MAPBOX_STATIC_TOKEN =
   process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ??
-  "pk.eyJ1IjoiZ2lybWF5bmwyMSIsImEiOiJjbWgyODQ4ancxNDdqMmlxeTY2aHFkdDdqIn0.kx667AeRIVB9gDo42gLOHA";
+  "pk.eyJ1IjoiZ2lybWF5bmwyMSIsImEiOiJjbWgyODQ4ancxNDdqMmlxeTY2aHFkdDdqIn0.kx667AeRIVB9gDo42gLOHA"
 
 const formatDistance = (km?: number): string => {
-  if (typeof km !== "number" || Number.isNaN(km)) return "—";
-  if (km < 1) return `${Math.round(km * 1000)}m`;
-  return `${km.toFixed(1)}km`;
-};
+  if (typeof km !== "number" || Number.isNaN(km)) return "—"
+  if (km < 1) return `${Math.round(km * 1000)}m`
+  return `${km.toFixed(1)}km`
+}
 
-const ACTIVITY_EMOJI_MAP: Array<{ keywords: RegExp; emoji: string }> = [
-  { keywords: /coffee|espresso|latte|☕/i, emoji: "☕" },
-  { keywords: /tea|bubble|boba|🧋/i, emoji: "🧋" },
-  { keywords: /park|walk|stroll|🌳/i, emoji: "🌳" },
-  { keywords: /remote|laptop|work|💻/i, emoji: "💻" },
-  { keywords: /museum|art|gallery/i, emoji: "🖼️" },
-  { keywords: /study|library/i, emoji: "📚" },
-];
-
-const getAvailabilityEmoji = (description?: string | null) => {
-  if (!description) return "✨";
-  const match = ACTIVITY_EMOJI_MAP.find((item) =>
-    item.keywords.test(description),
-  );
-  return match ? match.emoji : "✨";
-};
-
-const getTimeLeftLabel = (
-  availability?: string | null,
-  fallback?: string | null,
-) => {
+const getTimeLeftLabel = (availability?: string | null, fallback?: string | null) => {
   if (availability) {
-    const minuteMatch = availability.match(/(\d+)\s?(?:m|min|minutes?)/i);
+    const minuteMatch = availability.match(/(\d+)\s?(?:m|min|minutes?)/i)
     if (minuteMatch) {
-      return `${minuteMatch[1]}m left`;
+      return `${minuteMatch[1]}m left`
     }
   }
 
   if (fallback) {
-    const minuteMatch = fallback.match(/(\d+)\s?(?:m|min|minutes?)/i);
+    const minuteMatch = fallback.match(/(\d+)\s?(?:m|min|minutes?)/i)
     if (minuteMatch) {
-      return `${minuteMatch[1]}m left`;
+      return `${minuteMatch[1]}m left`
     }
   }
 
-  return "Available now";
-};
-
-interface MapViewProps {
-  onSetFlag: () => void;
-  onProfileModalChange?: (isOpen: boolean) => void;
-  onRegisterAvailabilityToggle?: (toggle: (() => void) | null) => void;
-  onStartChat?: (chat: {
-    conversationId: string;
-    otherUserId: string;
-    name: string;
-    avatar: string;
-    online: boolean;
-  }) => void;
+  return "Available now"
 }
 
-export function MapView({
-  onSetFlag,
-  onProfileModalChange,
-  onRegisterAvailabilityToggle,
-  onStartChat,
-}: MapViewProps) {
-  const [selectedUser, setSelectedUser] = useState<MapUser | null>(null);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
-  const [isAvailable, setIsAvailable] = useState(false);
-  const [availabilityDuration, setAvailabilityDuration] = useState<number>(60);
-  const [tempIsAvailable, setTempIsAvailable] = useState(false);
-  const [tempAvailabilityDuration, setTempAvailabilityDuration] =
-    useState<number>(60);
-  const [isSavingAvailability, setIsSavingAvailability] = useState(false);
-  const [availabilityError, setAvailabilityError] = useState<string | null>(
-    null,
-  );
-  const [connectMessage, setConnectMessage] = useState("");
-  const [connectError, setConnectError] = useState<string | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isOpeningChat, setIsOpeningChat] = useState(false);
-  const [isMatching, setIsMatching] = useState(false);
-  const [isInviting, setIsInviting] = useState(false);
-  const [filterDistance, setFilterDistance] = useState(25);
-  const [filterAvailableNow, setFilterAvailableNow] = useState(false);
-  const [filterSkillLevel, setFilterSkillLevel] = useState<string[]>([]);
-  const [currentCity, setCurrentCity] = useState<string | null>(null);
-  const [availabilityMessage, setAvailabilityMessage] = useState("");
-  const [tempAvailabilityMessage, setTempAvailabilityMessage] = useState("");
-  const [availabilityEmoji, setAvailabilityEmoji] =
-    useState<(typeof AVAILABILITY_EMOJIS)[number]>("💬");
-  const [tempAvailabilityEmoji, setTempAvailabilityEmoji] =
-    useState<(typeof AVAILABILITY_EMOJIS)[number]>("💬");
-  const [activeMapFilter, setActiveMapFilter] = useState<MapFilter>("people");
-  const [selectedPoi, setSelectedPoi] = useState<MapPoi | null>(null);
-  const [currentUserProfile, setCurrentUserProfile] =
-    useState<UserRecord | null>(null);
-  const [recentEventIds, setRecentEventIds] = useState<string[]>([]);
-  const previousEventIdsRef = useRef<Set<string>>(new Set());
+interface MapViewProps {
+  onSetFlag: () => void
+  onProfileModalChange?: (isOpen: boolean) => void
+  onRegisterAvailabilityToggle?: (toggle: (() => void) | null) => void
+  onStartChat?: (chat: {
+    conversationId: string
+    otherUserId: string
+    name: string
+    avatar: string
+    online: boolean
+  }) => void
+}
 
-  const { toast } = useToast();
+export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilityToggle, onStartChat }: MapViewProps) {
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false)
+  const [isAvailable, setIsAvailable] = useState(false)
+  const [availabilityDuration, setAvailabilityDuration] = useState<number>(60)
+  const [tempIsAvailable, setTempIsAvailable] = useState(false)
+  const [tempAvailabilityDuration, setTempAvailabilityDuration] = useState<number>(60)
+  const [isSavingAvailability, setIsSavingAvailability] = useState(false)
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null)
+  const [isMatching, setIsMatching] = useState(false)
+  const [isOpeningChat, setIsOpeningChat] = useState(false)
+  const [isInviting, setIsInviting] = useState(false)
+  const [filterDistance, setFilterDistance] = useState(25)
+  const [filterAvailableNow, setFilterAvailableNow] = useState(false)
+  const [filterSkillLevel, setFilterSkillLevel] = useState<string[]>([])
+  const [currentCity, setCurrentCity] = useState<string | null>(null)
+  const [availabilityMessage, setAvailabilityMessage] = useState("")
+  const [tempAvailabilityMessage, setTempAvailabilityMessage] = useState("")
+  const [availabilityEmoji, setAvailabilityEmoji] =
+    useState<(typeof AVAILABILITY_EMOJIS)[number]>("💬")
+  const [tempAvailabilityEmoji, setTempAvailabilityEmoji] =
+    useState<(typeof AVAILABILITY_EMOJIS)[number]>("💬")
+  const [activeMapFilter, setActiveMapFilter] = useState<MapFilter>("people")
+  const [selectedPoi, setSelectedPoi] = useState<MapPoi | null>(null)
+  const [currentUserProfile, setCurrentUserProfile] = useState<UserRecord | null>(null)
+  const [recentEventIds, setRecentEventIds] = useState<string[]>([])
+  const previousEventIdsRef = useRef<Set<string>>(new Set())
+  const [selectedUserIndex, setSelectedUserIndex] = useState<number | null>(null)
+  const [favoriteProfileIds, setFavoriteProfileIds] = useState<Set<string>>(new Set())
+
+  const { toast } = useToast()
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined") return
     try {
-      const stored = window.localStorage.getItem("availability-meta");
+      const stored = window.localStorage.getItem("availability-meta")
       if (stored) {
-        const parsed = JSON.parse(stored);
+        const parsed = JSON.parse(stored)
         if (parsed?.message) {
-          setAvailabilityMessage(String(parsed.message).slice(0, 100));
+          setAvailabilityMessage(String(parsed.message).slice(0, 100))
         }
         if (parsed?.emoji && AVAILABILITY_EMOJIS.includes(parsed.emoji)) {
-          setAvailabilityEmoji(
-            parsed.emoji as (typeof AVAILABILITY_EMOJIS)[number],
-          );
+          setAvailabilityEmoji(parsed.emoji as (typeof AVAILABILITY_EMOJIS)[number])
         }
       }
     } catch (error) {
-      console.warn("[MapView] Failed to restore availability meta:", error);
+      console.warn("[MapView] Failed to restore availability meta:", error)
     }
-  }, []);
+  }, [])
 
   const {
     users: nearbyUsers,
@@ -337,106 +403,33 @@ export function MapView({
     availableNow: filterAvailableNow,
     languages: [],
     skillLevel: filterSkillLevel,
-  });
+  })
 
   useEffect(() => {
-    let isMounted = true;
+    let isMounted = true
     userService
       .getCurrentUser()
       .then((user) => {
-        if (!isMounted) return;
-        setCurrentUserProfile(user ?? null);
-        const normalizedCity = user?.city?.trim();
-        setCurrentCity(
-          normalizedCity && normalizedCity.length > 0 ? normalizedCity : null,
-        );
+        if (!isMounted) return
+        setCurrentUserProfile(user ?? null)
+        const normalizedCity = user?.city?.trim()
+        setCurrentCity(normalizedCity && normalizedCity.length > 0 ? normalizedCity : null)
         if (!availabilityMessage && user?.bio) {
-          setAvailabilityMessage(user.bio.slice(0, 100));
+          setAvailabilityMessage(user.bio.slice(0, 100))
         }
       })
       .catch((error) => {
-        console.warn("[MapView] Failed to fetch current user:", error);
+        console.warn("[MapView] Failed to fetch current user:", error)
         if (isMounted) {
-          setCurrentCity(null);
-          setCurrentUserProfile(null);
+          setCurrentCity(null)
+          setCurrentUserProfile(null)
         }
-      });
+      })
 
     return () => {
-      isMounted = false;
-    };
-  }, [availabilityMessage]);
-
-  const mapUsers = useMemo<MapUser[]>(() => {
-    return nearbyUsers.map((dbUser) => {
-      const coordinates = resolveUserCoordinates(
-        dbUser.id,
-        dbUser.latitude,
-        dbUser.longitude,
-      );
-      const primaryLanguageCode =
-        dbUser.languages_speak?.[0] ?? dbUser.languages_learn?.[0] ?? "en";
-      const languageName = getLanguageName(primaryLanguageCode);
-      const flag = getLanguageFlag(primaryLanguageCode);
-
-      const spoken = (dbUser.languages_speak ?? []).map((code) => ({
-        language: getLanguageName(code),
-        flag: getLanguageFlag(code),
-        level: "Native",
-      }));
-
-      const learning = (dbUser.languages_learn ?? []).map((code) => ({
-        language: getLanguageName(code),
-        flag: getLanguageFlag(code),
-        level: "Learning",
-      }));
-
-      const languagesSpoken = [...spoken, ...learning];
-      const nativeFlagIcon = spoken[0]?.flag ?? flag;
-
-      return {
-        id: dbUser.id,
-        name: dbUser.full_name ?? "Language Explorer",
-        language: languageName,
-        flag,
-        nativeFlag: nativeFlagIcon,
-        distance: dbUser.distanceFormatted ?? formatDistance(dbUser.distance),
-        lat: coordinates.latitude,
-        lng: coordinates.longitude,
-        bio: dbUser.bio ?? "Language enthusiast ready to connect.",
-    availableFor: "30 min",
-        image: dbUser.avatar_url ?? "/placeholder-user.jpg",
-        isOnline: Boolean(dbUser.is_online),
-        rating: 4.8,
-    responseTime: "2 min",
-        currentLocation: dbUser.city ?? "Unknown location",
-        availableNow: dbUser.availability_status === "available",
-        timePreference:
-          dbUser.availability_status === "available"
-            ? "Available now"
-            : "Flexible schedule",
-        languagesSpoken:
-          languagesSpoken.length > 0
-            ? languagesSpoken
-            : [
-                {
-                  language: languageName,
-                  flag,
-                  level: "Native",
-                },
-              ],
-        isFallbackLocation: coordinates.isFallback,
-        availabilityMessage:
-          dbUser.bio?.slice(0, 100) ??
-          (dbUser.availability_status === "available"
-            ? "Available for a quick conversation."
-            : "Ping me to schedule a language exchange."),
-        availabilityEmoji:
-          dbUser.availability_status === "available" ? "💬" : "🌙",
-        isViewer: false,
-      };
-    });
-  }, [nearbyUsers]);
+      isMounted = false
+    }
+  }, [availabilityMessage])
 
   const viewerLanguages = useMemo(() => {
     const speak =
@@ -444,16 +437,16 @@ export function MapView({
         language: getLanguageName(code),
         flag: getLanguageFlag(code),
         level: "Native",
-      })) ?? [];
+      })) ?? []
 
     const learn =
       currentUserProfile?.languages_learn?.map((code) => ({
         language: getLanguageName(code),
         flag: getLanguageFlag(code),
         level: "Learning",
-      })) ?? [];
+      })) ?? []
 
-    const combined = [...speak, ...learn];
+    const combined = [...speak, ...learn]
     if (combined.length === 0) {
       return [
         {
@@ -461,49 +454,401 @@ export function MapView({
           flag: getLanguageFlag("en"),
           level: "Native",
         },
-      ];
+      ]
     }
-    return combined;
-  }, [currentUserProfile]);
+    return combined
+  }, [currentUserProfile])
+
+  const mapUsers = useMemo<MapUser[]>(() => {
+    const viewerLanguageSet = new Set(viewerLanguages.map((lang) => lang.language.toLowerCase()))
+    const viewerNative = viewerLanguages.find((lang) => lang.level === "Native")
+    const viewerLearning = viewerLanguages.find((lang) => lang.level !== "Native")
+    const viewerFallbackFlag = viewerNative?.flag ?? viewerLanguages[0]?.flag ?? "🌍"
+    const displayCityLabel = currentCity ?? "Den Haag"
+
+    return nearbyUsers.map((dbUser) => {
+      const coordinates = resolveUserCoordinates(dbUser.id, dbUser.latitude, dbUser.longitude)
+      const primaryLanguageCode = dbUser.languages_speak?.[0] ?? dbUser.languages_learn?.[0] ?? "en"
+      const languageName = getLanguageName(primaryLanguageCode)
+      const flag = getLanguageFlag(primaryLanguageCode)
+
+      const languageRows =
+        ((dbUser as any).user_languages as
+          | Array<{
+              language_code: string
+              language_type: "native" | "learning"
+              proficiency_level?: string | null
+            }>
+          | undefined) ?? []
+
+      const detailedBadges =
+        languageRows.length > 0
+          ? languageRows.map((row) => {
+              const levelKey = normalizeLevelKey(row.proficiency_level ?? row.language_type)
+              const gradient = resolveLevelGradient(levelKey)
+              return {
+                language: getLanguageName(row.language_code),
+                flag: getLanguageFlag(row.language_code),
+                levelKey,
+                levelLabel: gradient.label,
+              }
+            })
+          : [...(dbUser.languages_speak ?? []), ...(dbUser.languages_learn ?? [])].map((code, index) => {
+              const isNative = index < (dbUser.languages_speak?.length ?? 0)
+              const levelKey = isNative ? "native" : "beginner"
+              const gradient = resolveLevelGradient(levelKey)
+              return {
+                language: getLanguageName(code),
+                flag: getLanguageFlag(code),
+                levelKey,
+                levelLabel: gradient.label,
+              }
+            })
+
+      if (detailedBadges.length === 0) {
+        const gradient = resolveLevelGradient("native")
+        detailedBadges.push({
+          language: languageName,
+          flag,
+          levelKey: "native",
+          levelLabel: gradient.label,
+        })
+      }
+
+      const highestBadge = detailedBadges.reduce<{ levelKey: string; flag: string; language: string; levelLabel: string }>(
+        (acc, badge) => {
+          if (!acc) return badge
+          const currentPriority = LEVEL_PRIORITY[badge.levelKey] ?? 0
+          const accPriority = LEVEL_PRIORITY[acc.levelKey] ?? 0
+          return currentPriority >= accPriority ? badge : acc
+        },
+        detailedBadges[0],
+      )
+
+      const primaryBadge =
+        detailedBadges.find((badge) => badge.levelKey === "native") ??
+        detailedBadges.find((badge) => badge.levelKey === highestBadge.levelKey) ??
+        highestBadge
+
+      const secondaryBadge =
+        detailedBadges.find(
+          (badge) => badge !== primaryBadge && badge.language.toLowerCase() !== primaryBadge?.language.toLowerCase(),
+        ) ?? detailedBadges[1] ?? primaryBadge
+
+      const levelGradient = resolveLevelGradient(highestBadge?.levelKey)
+
+      const timeLeftLabel = dbUser.availability_status === "available" ? "30m left" : ""
+
+      const availabilityMessage =
+        dbUser.bio?.slice(0, 100) ??
+        (dbUser.availability_status === "available"
+          ? "Available for a quick conversation."
+          : "Ping me to schedule a language exchange.")
+
+      const availabilityEmoji =
+        AVAILABILITY_EMOJIS.find((emoji) => availabilityMessage.includes(emoji)) ??
+        (dbUser.availability_status === "available" ? "💬" : null)
+
+      const { icon: statusIcon, text: statusText } = resolveStatusMeta({
+        availableNow: dbUser.availability_status === "available",
+        availabilityEmoji,
+        availabilityMessage,
+        currentLocation: dbUser.city ?? "Nearby cafe",
+        secondaryLanguage: secondaryBadge?.language,
+        primaryLanguage: primaryBadge?.language ?? languageName,
+        timeLeftLabel,
+      })
+
+      const matchScore = computeMatchScore(
+        detailedBadges.map((badge) => ({ language: badge.language, levelKey: badge.levelKey })),
+        Array.from(viewerLanguageSet).map((language) => ({ language })),
+        dbUser.distance,
+      )
+
+      const derivedTimePreference =
+        (dbUser as any)?.timePreference ??
+        (dbUser.availability_status === "available" ? "Available now" : "Evenings & weekends")
+      const currentLocationLabel = dbUser.city ?? displayCityLabel
+      const rawRating = Number((dbUser as any)?.rating ?? 4.8)
+      const rawTrades = Number((dbUser as any)?.trades_completed ?? Math.max(18, Math.round((matchScore ?? 80) / 1.6)))
+      const rawStreak = Number((dbUser as any)?.streak_days ?? 14)
+      const rawMinutes = Number((dbUser as any)?.practice_minutes ?? 220)
+
+      const teachesCards: ProfileLanguageCard[] = detailedBadges
+        .filter((badge) => badge.levelKey === "native")
+        .map((badge) => ({
+          flag: badge.flag,
+          language: badge.language,
+          level: badge.levelLabel,
+          progress: 100,
+          description: `Sharing ${badge.language.toLowerCase()} confidently.`,
+          variant: "teach",
+        }))
+
+      const learnsCards: ProfileLanguageCard[] = detailedBadges
+        .filter((badge) => badge.levelKey !== "native")
+        .map((badge) => ({
+          flag: badge.flag,
+          language: badge.language,
+          level: badge.levelLabel,
+          progress: badge.levelLabel === "Advanced" ? 80 : badge.levelLabel === "Intermediate" ? 60 : 45,
+          description: `Practising ${badge.language.toLowerCase()} each week.`,
+          variant: "learn",
+        }))
+
+      if (!teachesCards.length) {
+        teachesCards.push({
+          flag,
+          language: primaryBadge?.language ?? languageName,
+          level: primaryBadge?.levelLabel ?? "Native",
+          progress: 100,
+          description: dbUser.bio ?? "Happy to help others improve.",
+          variant: "teach",
+        })
+      }
+
+      if (!learnsCards.length) {
+        learnsCards.push({
+          flag: viewerLearning?.flag ?? viewerFallbackFlag,
+          language: secondaryBadge?.language ?? "New language",
+          level: secondaryBadge?.levelLabel ?? "Intermediate",
+          progress: 55,
+          description: "Open to casual meetups and practice sessions.",
+          variant: "learn",
+        })
+      }
+
+      const statCards: ProfileStatCard[] = [
+        { label: "Trades", value: String(Math.max(12, Math.round(rawTrades))) },
+        { label: "Rating", value: `${rawRating.toFixed(1)}★` },
+        { label: "Streak", value: `🔥${Math.max(6, Math.round(rawStreak))}` },
+        { label: "Hours", value: `⏱${Math.max(60, Math.round(rawMinutes))}` },
+      ]
+
+      const availabilityInfo: ProfileAvailabilityInfo = {
+        headline: dbUser.availability_status === "available" ? "⚡ Available for practice" : "🎧 Scheduling sessions",
+        subtitle:
+          dbUser.availability_status === "available" ? `Next ${timeLeftLabel || "30 minutes"}` : derivedTimePreference,
+        schedule: `📅 Usually active: ${derivedTimePreference}`,
+        locations: `☕ Preferred locations: ${currentLocationLabel}`,
+      }
+
+      const pairFlags = Array.from(
+        new Set(
+          [
+            primaryBadge?.flag,
+            secondaryBadge?.flag,
+            viewerLearning?.flag,
+            viewerFallbackFlag,
+          ].filter(Boolean) as string[],
+        ),
+      ).slice(0, 2)
+
+      return {
+        id: dbUser.id,
+        name: dbUser.full_name ?? "Language Explorer",
+        language: languageName,
+        flag,
+        distance: dbUser.distanceFormatted ?? formatDistance(dbUser.distance),
+        lat: coordinates.latitude,
+        lng: coordinates.longitude,
+        bio: dbUser.bio ?? "Language enthusiast ready to connect.",
+        availableFor: timeLeftLabel || "30m left",
+        image: dbUser.avatar_url ?? "/placeholder-user.jpg",
+        isOnline: Boolean(dbUser.is_online),
+        rating: Number.isFinite(rawRating) ? rawRating : 4.8,
+        responseTime: "2 min",
+        currentLocation: currentLocationLabel ?? "Unknown location",
+        availableNow: dbUser.availability_status === "available",
+        timePreference: typeof derivedTimePreference === "string" ? derivedTimePreference : "Flexible schedule",
+        languagesSpoken: detailedBadges.map((badge) => ({
+          language: badge.language,
+          flag: badge.flag,
+          level: badge.levelLabel,
+        })),
+        primaryLanguage: primaryBadge?.language ?? languageName,
+        secondaryLanguage: secondaryBadge?.language,
+        primaryFlag: primaryBadge?.flag ?? flag,
+        secondaryFlag:
+          secondaryBadge && secondaryBadge.flag !== primaryBadge?.flag ? secondaryBadge.flag : undefined,
+        matchScore,
+        statusIcon,
+        statusText,
+        levelGradient,
+        pairFlags,
+        isFallbackLocation: coordinates.isFallback,
+        availabilityMessage,
+        availabilityEmoji,
+        isViewer: false,
+        languagePairLabel: pairFlags.length ? `${pairFlags.join(" ")} Language Trader` : undefined,
+        compatibilityScore: matchScore,
+        compatibilityBlurb: statusText,
+        levelBadge: { title: levelGradient.label ?? "Language Explorer", tier: statusText ?? "Active partner" },
+        teaches: teachesCards,
+        learns: learnsCards,
+        stats: statCards,
+        availabilityInfo,
+      }
+    })
+  }, [nearbyUsers, viewerLanguages, currentCity])
+
+  const closeProfileSheet = useCallback(() => {
+    setSelectedUserIndex(null)
+  }, [])
+
+  const openProfileAtIndex = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= mapUsers.length) return
+      setSelectedUserIndex(index)
+    },
+    [mapUsers.length],
+  )
 
   useEffect(() => {
-    if (!selectedUser) return;
-    const stillExists = mapUsers.some((user) => user.id === selectedUser.id);
-    if (!stillExists) {
-      setSelectedUser(null);
-      onProfileModalChange?.(false);
+    if (selectedUserIndex === null) return
+    if (selectedUserIndex < 0 || selectedUserIndex >= mapUsers.length) {
+      closeProfileSheet()
     }
-  }, [mapUsers, onProfileModalChange, selectedUser]);
+  }, [mapUsers, selectedUserIndex, closeProfileSheet])
 
   useEffect(() => {
-    setIsAvailable(filterAvailableNow);
-  }, [filterAvailableNow]);
+    onProfileModalChange?.(selectedUserIndex !== null)
+  }, [selectedUserIndex, onProfileModalChange])
+
+  useEffect(() => {
+    setIsAvailable(filterAvailableNow)
+  }, [filterAvailableNow])
+
+  useEffect(() => {
+    let isMounted = true
+    connectionService
+      .listFavoriteUserIds()
+      .then((ids) => {
+        if (!isMounted) return
+        setFavoriteProfileIds(new Set(ids))
+      })
+      .catch((error) => {
+        console.error("[MapView] Failed to load favorite users:", error)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const effectiveUserLocation = userLocation ?? {
     lat: FALLBACK_CITY_CENTER.latitude,
     lng: FALLBACK_CITY_CENTER.longitude,
-  };
-  const nearbyCount = nearbyUsers.length;
-  const displayCity = currentCity ?? "Den Haag";
+  }
+  const nearbyCount = nearbyUsers.length
+  const displayCity = currentCity ?? "Den Haag"
   const mapPreviewUrl = useMemo(() => {
-    if (!effectiveUserLocation || !MAPBOX_STATIC_TOKEN) return null;
-    const { lat, lng } = effectiveUserLocation;
-    const formattedLat = Number.isFinite(lat)
-      ? lat.toFixed(6)
-      : FALLBACK_CITY_CENTER.latitude.toFixed(6);
-    const formattedLng = Number.isFinite(lng)
-      ? lng.toFixed(6)
-      : FALLBACK_CITY_CENTER.longitude.toFixed(6);
-    return `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+38bdf8(${formattedLng},${formattedLat})/${formattedLng},${formattedLat},13,0/480x240@2x?access_token=${MAPBOX_STATIC_TOKEN}`;
-  }, [effectiveUserLocation]);
+    if (!effectiveUserLocation || !MAPBOX_STATIC_TOKEN) return null
+    const { lat, lng } = effectiveUserLocation
+    const formattedLat = Number.isFinite(lat) ? lat.toFixed(6) : FALLBACK_CITY_CENTER.latitude.toFixed(6)
+    const formattedLng = Number.isFinite(lng) ? lng.toFixed(6) : FALLBACK_CITY_CENTER.longitude.toFixed(6)
+    return `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+38bdf8(${formattedLng},${formattedLat})/${formattedLng},${formattedLat},13,0/480x240@2x?access_token=${MAPBOX_STATIC_TOKEN}`
+  }, [effectiveUserLocation])
+
+  const selectedUser =
+    selectedUserIndex !== null && selectedUserIndex >= 0 && selectedUserIndex < mapUsers.length
+      ? mapUsers[selectedUserIndex]
+      : null
+
+  const profileCardProfiles = useMemo<ProfileCardProfile[]>(() => {
+    return mapUsers.map((user) => {
+      const primaryLanguageBadge = user.languagesSpoken.find((lang) => lang.language === user.primaryLanguage)
+      const fallbackLanguage = user.languagesSpoken[0]
+      const languageName =
+        user.primaryLanguage ?? primaryLanguageBadge?.language ?? fallbackLanguage?.language ?? user.language ?? "Language partner"
+      const languageLevel =
+        primaryLanguageBadge?.level ?? user.levelGradient.label ?? fallbackLanguage?.level ?? "Native"
+      const flag =
+        user.primaryFlag ?? primaryLanguageBadge?.flag ?? fallbackLanguage?.flag ?? user.flag ?? "🌍"
+      const displayName = user.name ?? "Language Explorer"
+      const handle = `@${displayName.toLowerCase().replace(/\s+/g, "")}`
+      const description =
+        user.availabilityMessage ??
+        user.bio ??
+        "Language enthusiast ready to connect."
+      const timeLeft = user.availableFor || user.timePreference || "Available soon"
+
+      return {
+        id: user.id,
+        username: handle,
+        displayName,
+        distance: user.distance ?? "Nearby",
+        timeLeft,
+        language: languageName,
+        languageLevel,
+        flag,
+        status:
+          user.availableFor && user.availableFor.length > 0
+            ? `On for ${user.availableFor}`
+            : user.availableNow
+            ? "Available now"
+            : user.timePreference || "Available soon",
+        description,
+        location: user.currentLocation ?? displayCity,
+        avatar: displayName.charAt(0).toUpperCase(),
+        avatarUrl: user.image || undefined,
+        languagePairLabel: user.languagePairLabel,
+        isOnline: user.isOnline,
+        compatibilityScore: user.matchScore,
+        compatibilityBlurb: user.statusText,
+        levelBadge: { title: user.levelGradient?.label ?? "Language Explorer", tier: user.statusText ?? "Active partner" },
+        teaches: user.teaches,
+        learns: user.learns,
+        stats: user.stats,
+        availabilityInfo: user.availabilityInfo,
+        reviews: [],
+        totalReviews: undefined,
+      }
+    })
+  }, [mapUsers, displayCity])
+
+  const resolveProfileTarget = useCallback(
+    (profile?: ProfileCardProfile) => {
+      if (profile) {
+        const targetIndex = mapUsers.findIndex((candidate) => candidate.id === String(profile.id))
+        if (targetIndex !== -1) {
+          return { user: mapUsers[targetIndex], index: targetIndex }
+        }
+      }
+      if (selectedUser) {
+        return { user: selectedUser, index: selectedUserIndex ?? -1 }
+      }
+      return null
+    },
+    [mapUsers, selectedUser, selectedUserIndex],
+  )
 
   const viewerMarker = useMemo<MapUser | null>(() => {
-    if (!effectiveUserLocation) return null;
+    if (!effectiveUserLocation) return null
+    const viewerPrimaryLanguage = viewerLanguages[0]?.language ?? "Any language"
+    const viewerSecondaryLanguage = viewerLanguages[1]?.language
+    const viewerPrimaryFlag = viewerLanguages[0]?.flag ?? "🌍"
+    const viewerSecondaryFlag = viewerLanguages[1]?.flag
+    const viewerPairFlags = Array.from(
+      new Set([viewerPrimaryFlag, viewerSecondaryFlag].filter(Boolean) as string[]),
+    ).slice(0, 2)
+    const viewerLevelGradient = resolveLevelGradient(viewerLanguages[0]?.level ?? "native")
+    const viewerTimeLeftLabel = getTimeLeftLabel(`${availabilityDuration} min`, isAvailable ? "Available now" : null)
+    const viewerStatus = resolveStatusMeta({
+      availableNow: isAvailable,
+      availabilityEmoji,
+      availabilityMessage,
+      currentLocation: displayCity,
+      primaryLanguage: viewerPrimaryLanguage,
+      secondaryLanguage: viewerSecondaryLanguage,
+      timeLeftLabel: viewerTimeLeftLabel,
+    })
+
     return {
       id: "viewer",
       name: currentUserProfile?.full_name ?? "You",
-      language: viewerLanguages[0]?.language ?? "Any language",
-      flag: viewerLanguages[0]?.flag ?? "🌍",
+      language: viewerPrimaryLanguage,
+      flag: viewerPrimaryFlag,
       distance: "0m",
       lat: effectiveUserLocation.lat,
       lng: effectiveUserLocation.lng,
@@ -521,7 +866,16 @@ export function MapView({
       availabilityMessage: availabilityMessage || "Ready to connect nearby.",
       availabilityEmoji: availabilityEmoji,
       isViewer: true,
-    };
+      matchScore: 100,
+      statusIcon: viewerStatus.icon,
+      statusText: viewerStatus.text,
+      levelGradient: viewerLevelGradient,
+      primaryLanguage: viewerPrimaryLanguage,
+      secondaryLanguage: viewerSecondaryLanguage,
+      primaryFlag: viewerPrimaryFlag,
+      secondaryFlag: viewerSecondaryFlag,
+      pairFlags: viewerPairFlags,
+    }
   }, [
     effectiveUserLocation,
     currentUserProfile,
@@ -531,11 +885,11 @@ export function MapView({
     isAvailable,
     availabilityMessage,
     availabilityEmoji,
-  ]);
+  ])
 
   const basePois = useMemo<MapPoi[]>(() => {
-    if (!effectiveUserLocation) return [];
-    const { lat, lng } = effectiveUserLocation;
+    if (!effectiveUserLocation) return []
+    const { lat, lng } = effectiveUserLocation
     return [
       {
         id: "cafe-esperanto",
@@ -559,8 +913,7 @@ export function MapView({
         emoji: "🏫",
         lat: lat - 0.004,
         lng: lng - 0.006,
-        description:
-          "Drop-in pronunciation booths and tutoring corners for immersive practice.",
+        description: "Drop-in pronunciation booths and tutoring corners for immersive practice.",
       },
       {
         id: "event-tandem-sunset",
@@ -572,8 +925,7 @@ export function MapView({
         emoji: "📅",
         lat: lat + 0.008,
         lng: lng - 0.003,
-        description:
-          "Evening stroll by the dunes with rotating partners every 10 minutes.",
+        description: "Evening stroll by the dunes with rotating partners every 10 minutes.",
       },
       {
         id: "event-silent-disco",
@@ -585,8 +937,7 @@ export function MapView({
         emoji: "🎧",
         lat: lat - 0.007,
         lng: lng + 0.005,
-        description:
-          "Pair up, plug in, and narrate your playlist picks in another language.",
+        description: "Pair up, plug in, and narrate your playlist picks in another language.",
       },
       {
         id: "cafe-matcha",
@@ -600,88 +951,82 @@ export function MapView({
         lng: lng + 0.007,
         description: "Guided kanji sketching over calming tea flights.",
       },
-    ];
-  }, [effectiveUserLocation]);
+    ]
+  }, [effectiveUserLocation])
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const currentEventIds = basePois
-      .filter((poi) => poi.type === "event")
-      .map((poi) => poi.id);
-    const previousIds = previousEventIdsRef.current;
-    const newIds = currentEventIds.filter((id) => !previousIds.has(id));
-    previousEventIdsRef.current = new Set(currentEventIds);
-    if (newIds.length === 0) return;
-    setRecentEventIds((prev) => Array.from(new Set([...prev, ...newIds])));
+    if (typeof window === "undefined") return
+    const currentEventIds = basePois.filter((poi) => poi.type === "event").map((poi) => poi.id)
+    const previousIds = previousEventIdsRef.current
+    const newIds = currentEventIds.filter((id) => !previousIds.has(id))
+    previousEventIdsRef.current = new Set(currentEventIds)
+    if (newIds.length === 0) return
+    setRecentEventIds((prev) => Array.from(new Set([...prev, ...newIds])))
     const timeout = window.setTimeout(() => {
-      setRecentEventIds((prev) => prev.filter((id) => !newIds.includes(id)));
-    }, 8000);
-    return () => window.clearTimeout(timeout);
-  }, [basePois]);
+      setRecentEventIds((prev) => prev.filter((id) => !newIds.includes(id)))
+    }, 8000)
+    return () => window.clearTimeout(timeout)
+  }, [basePois])
 
   const poisForMap = useMemo<MapPoi[]>(() => {
-    if (!recentEventIds.length) return basePois;
+    if (!recentEventIds.length) return basePois
     return basePois.map((poi) => ({
       ...poi,
       isNew: recentEventIds.includes(poi.id),
-    }));
-  }, [basePois, recentEventIds]);
+    }))
+  }, [basePois, recentEventIds])
 
   const usersForMap = useMemo(() => {
     if (activeMapFilter === "places" || activeMapFilter === "events") {
-      return viewerMarker ? [viewerMarker] : [];
+      return viewerMarker ? [viewerMarker] : []
     }
     const base =
-      activeMapFilter === "highlights"
-        ? mapUsers.filter((user) => user.availableNow)
-        : mapUsers;
-    return viewerMarker ? [viewerMarker, ...base] : base;
-  }, [activeMapFilter, viewerMarker, mapUsers]);
+      activeMapFilter === "highlights" ? mapUsers.filter((user) => user.availableNow) : mapUsers
+    return viewerMarker ? [viewerMarker, ...base] : base
+  }, [activeMapFilter, viewerMarker, mapUsers])
 
   const filteredPois = useMemo(() => {
     switch (activeMapFilter) {
       case "places":
-        return poisForMap.filter(
-          (poi) => poi.type === "cafe" || poi.type === "school",
-        );
+        return poisForMap.filter((poi) => poi.type === "cafe" || poi.type === "school")
       case "events":
-        return poisForMap.filter((poi) => poi.type === "event");
+        return poisForMap.filter((poi) => poi.type === "event")
       case "highlights":
-        return poisForMap.filter((poi) => poi.type === "event");
+        return poisForMap.filter((poi) => poi.type === "event")
       default:
-        return [];
+        return []
     }
-  }, [poisForMap, activeMapFilter]);
+  }, [poisForMap, activeMapFilter])
 
   useEffect(() => {
-    if (!selectedPoi) return;
-    const stillExists = filteredPois.some((poi) => poi.id === selectedPoi.id);
+    if (!selectedPoi) return
+    const stillExists = filteredPois.some((poi) => poi.id === selectedPoi.id)
     if (!stillExists) {
-      setSelectedPoi(null);
+      setSelectedPoi(null)
     }
-  }, [filteredPois, selectedPoi]);
+  }, [filteredPois, selectedPoi])
 
   useEffect(() => {
-    if (!onRegisterAvailabilityToggle) return;
+    if (!onRegisterAvailabilityToggle) return
 
     const openAvailability = () => {
-      setIsAvailabilityModalOpen(true);
-    };
+      setIsAvailabilityModalOpen(true)
+    }
 
-    onRegisterAvailabilityToggle(openAvailability);
+    onRegisterAvailabilityToggle(openAvailability)
 
     return () => {
-      onRegisterAvailabilityToggle(null);
-    };
-  }, [onRegisterAvailabilityToggle]);
+      onRegisterAvailabilityToggle(null)
+    }
+  }, [onRegisterAvailabilityToggle])
 
   useEffect(() => {
     if (isAvailabilityModalOpen) {
-      setAvailabilityError(null);
-      setTempIsAvailable(isAvailable);
-      setTempAvailabilityDuration(availabilityDuration);
-      setTempAvailabilityMessage(availabilityMessage);
-      setTempAvailabilityEmoji(availabilityEmoji);
+      setAvailabilityError(null)
+      setTempIsAvailable(isAvailable)
+      setTempAvailabilityDuration(availabilityDuration)
+      setTempAvailabilityMessage(availabilityMessage)
+      setTempAvailabilityEmoji(availabilityEmoji)
     }
   }, [
     isAvailabilityModalOpen,
@@ -689,74 +1034,74 @@ export function MapView({
     availabilityDuration,
     availabilityMessage,
     availabilityEmoji,
-  ]);
+  ])
 
   const handleRefresh = () => {
     refetch().catch((error) => {
-      console.error("[MapView] Refresh failed:", error);
-    });
-  };
+      console.error("[MapView] Refresh failed:", error)
+    })
+  }
 
   const handleUserSelect = (user: MapUser | null) => {
-    if (user?.isViewer) {
-      return;
+    if (!user) {
+      closeProfileSheet()
+      return
     }
-    setSelectedUser(user);
-    onProfileModalChange?.(user !== null);
-    setConnectMessage("");
-    setConnectError(null);
-  };
 
-  const durationOptions = [30, 60, 90, 120] as const;
+    if (user.isViewer) {
+      closeProfileSheet()
+      return
+    }
+
+    const index = mapUsers.findIndex((candidate) => candidate.id === user.id)
+    if (index !== -1) {
+      openProfileAtIndex(index)
+    }
+  }
+
+  const durationOptions = [30, 60, 90, 120] as const
 
   const handleToggleAvailability = () => {
-    if (isSavingAvailability) return;
-    setTempIsAvailable((prev) => !prev);
-  };
+    if (isSavingAvailability) return
+    setTempIsAvailable((prev) => !prev)
+  }
 
   const handleSaveAvailability = async () => {
-    const wasAvailable = isAvailable;
-    const trimmedMessage = tempAvailabilityMessage.trim().slice(0, 100);
-    const selectedEmoji = tempAvailabilityEmoji;
+    const wasAvailable = isAvailable
+    const trimmedMessage = tempAvailabilityMessage.trim().slice(0, 100)
+    const selectedEmoji = tempAvailabilityEmoji
 
-    setAvailabilityError(null);
-    setIsSavingAvailability(true);
+    setAvailabilityError(null)
+    setIsSavingAvailability(true)
     try {
-      const supabase = createClient();
+      const supabase = createClient()
       const {
         data: { session },
         error: sessionError,
-      } = await supabase.auth.getSession();
+      } = await supabase.auth.getSession()
 
-      if (sessionError) throw sessionError;
-      const userId = session?.user?.id;
-      if (!userId)
-        throw new Error("Please sign in again to update availability.");
+      if (sessionError) throw sessionError
+      const userId = session?.user?.id
+      if (!userId) throw new Error("Please sign in again to update availability.")
 
-      await userService.updateAvailability(
-        userId,
-        tempIsAvailable ? "available" : "offline",
-      );
+      await userService.updateAvailability(userId, tempIsAvailable ? "available" : "offline")
 
-      setIsAvailable(tempIsAvailable);
-      setAvailabilityDuration(tempAvailabilityDuration);
-      setFilterAvailableNow(tempIsAvailable);
-      setAvailabilityMessage(trimmedMessage);
-      setAvailabilityEmoji(selectedEmoji);
+      setIsAvailable(tempIsAvailable)
+      setAvailabilityDuration(tempAvailabilityDuration)
+      setFilterAvailableNow(tempIsAvailable)
+      setAvailabilityMessage(trimmedMessage)
+      setAvailabilityEmoji(selectedEmoji)
       if (typeof window !== "undefined") {
         try {
           window.localStorage.setItem(
             "availability-meta",
             JSON.stringify({ message: trimmedMessage, emoji: selectedEmoji }),
-          );
+          )
         } catch (storageError) {
-          console.warn(
-            "[MapView] Failed to persist availability meta:",
-            storageError,
-          );
+          console.warn("[MapView] Failed to persist availability meta:", storageError)
         }
       }
-      setIsAvailabilityModalOpen(false);
+    setIsAvailabilityModalOpen(false)
       if (tempIsAvailable && !wasAvailable) {
         toast({
           title: `${selectedEmoji} You’re now live`,
@@ -764,499 +1109,217 @@ export function MapView({
             trimmedMessage.length > 0
               ? `${trimmedMessage} • Visible in ${displayCity} for ${tempAvailabilityDuration} minutes.`
               : `Learners nearby in ${displayCity} can see you for the next ${tempAvailabilityDuration} minutes.`,
-        });
+        })
       }
-      await refetch();
+      await refetch()
     } catch (error: any) {
-      console.error("[MapView] Availability update error:", error);
-      setAvailabilityError(
-        error?.message ?? "Failed to update availability. Please try again.",
-      );
+      console.error("[MapView] Availability update error:", error)
+      setAvailabilityError(error?.message ?? "Failed to update availability. Please try again.")
     } finally {
-      setIsSavingAvailability(false);
+      setIsSavingAvailability(false)
     }
-  };
+  }
 
-  const handleConnectAndChat = async () => {
-    if (!selectedUser || isConnecting) return;
+  const handleAskToMatch = useCallback(
+    async (profile?: ProfileCardProfile) => {
+      const target = resolveProfileTarget(profile)
+      if (!target || isMatching) return
 
-    setConnectError(null);
-    setIsConnecting(true);
+      const firstName = target.user.name.split(" ")[0] ?? target.user.name
+      if (target.index !== -1 && target.index !== selectedUserIndex) {
+        setSelectedUserIndex(target.index)
+      }
+
+      setIsMatching(true)
+      try {
+        const result = await connectionService.sendFriendRequest(
+          target.user.id,
+          currentUserProfile?.full_name ?? undefined,
+        )
+
+        toast({
+          title: result?.alreadyPending ? "Request already sent" : "Match request sent",
+          description: result?.alreadyPending
+            ? `You already have a pending request with ${firstName}.`
+            : `We let ${firstName} know you'd like to connect.`,
+        })
+      } catch (error: any) {
+        console.error("[MapView] Failed to send match request:", error)
+        toast({
+          title: "Unable to send match request",
+          description: error?.message ?? "Please try again in a moment.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsMatching(false)
+      }
+    },
+    [resolveProfileTarget, isMatching, selectedUserIndex, currentUserProfile?.full_name, toast],
+  )
+
+  const handleOpenChat = async (profile?: ProfileCardProfile) => {
+    const target = resolveProfileTarget(profile)
+    if (!target || isOpeningChat) return
 
     try {
-      const supabase = createClient();
+      setIsOpeningChat(true)
+      const supabase = createClient()
       const {
         data: { session },
         error: sessionError,
-      } = await supabase.auth.getSession();
+      } = await supabase.auth.getSession()
 
-      if (sessionError) throw sessionError;
+      if (sessionError) throw sessionError
       if (!session?.user) {
-        throw new Error("Please sign in again to start a conversation.");
+        throw new Error("Please sign in again to start a conversation.")
       }
 
-      const conversation = await chatService.createOrGetConversation(
-        selectedUser.id,
-      );
+      const conversation = await chatService.createOrGetConversation(target.user.id)
 
-      const messageContent = connectMessage.trim();
-      if (messageContent) {
-        await chatService.sendMessage(conversation.id, messageContent, "text");
+      if (target.index !== -1 && target.index !== selectedUserIndex) {
+        setSelectedUserIndex(target.index)
       }
 
       onStartChat?.({
         conversationId: conversation.id,
-        otherUserId: selectedUser.id,
-        name: selectedUser.name,
-        avatar: selectedUser.image || "/placeholder-user.jpg",
-        online: selectedUser.isOnline,
-      });
+        otherUserId: target.user.id,
+        name: target.user.name,
+        avatar: target.user.image || "/placeholder-user.jpg",
+        online: target.user.isOnline,
+      })
 
-      setConnectMessage("");
-      setSelectedUser(null);
-      onProfileModalChange?.(false);
+      closeProfileSheet()
     } catch (error: any) {
-      console.error("[MapView] Failed to start chat:", error);
-      setConnectError(
-        error?.message ?? "We couldn’t start the chat. Please try again.",
-      );
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  const handleAskToMatch = () => {
-    if (!selectedUser || isMatching) return;
-    setIsMatching(true);
-    toast({
-      title: "Match request sent",
-      description: `We let ${selectedUser.name.split(" ")[0]} know you’d like to connect.`,
-    });
-    setTimeout(() => setIsMatching(false), 1200);
-  };
-
-  const handleOpenChat = async () => {
-    if (!selectedUser || isOpeningChat) return;
-
-    try {
-      setIsOpeningChat(true);
-      const supabase = createClient();
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError) throw sessionError;
-      if (!session?.user) {
-        throw new Error("Please sign in again to start a conversation.");
-      }
-
-      const conversation = await chatService.createOrGetConversation(
-        selectedUser.id,
-      );
-
-      onStartChat?.({
-        conversationId: conversation.id,
-        otherUserId: selectedUser.id,
-        name: selectedUser.name,
-        avatar: selectedUser.image || "/placeholder-user.jpg",
-        online: selectedUser.isOnline,
-      });
-
-      setSelectedUser(null);
-      onProfileModalChange?.(false);
-    } catch (error: any) {
-      console.error("[MapView] Failed to open chat:", error);
+      console.error("[MapView] Failed to open chat:", error)
       toast({
         title: "Unable to open chat",
         description: error?.message ?? "Please try again in a moment.",
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsOpeningChat(false);
+      setIsOpeningChat(false)
     }
-  };
-
-  const handleInviteToEvent = () => {
-    if (!selectedUser || isInviting) return;
-    setIsInviting(true);
-    toast({
-      title: "Invite sent",
-      description: `Sent a quick invite to ${selectedUser.name.split(" ")[0]}!`,
-    });
-    setTimeout(() => setIsInviting(false), 900);
-  };
-
-  if (selectedUser) {
-    const nativeLanguages = selectedUser.languagesSpoken.filter(
-      (lang) => lang.level === "Native",
-    );
-    const learningLanguages = selectedUser.languagesSpoken.filter(
-      (lang) => lang.level !== "Native",
-    );
-    const distanceLabel = selectedUser.distance || "Nearby";
-    const availabilityEmoji = getAvailabilityEmoji(
-      selectedUser.availableFor || selectedUser.timePreference,
-    );
-    const timeLeftLabel = getTimeLeftLabel(
-      selectedUser.availableFor,
-      selectedUser.timePreference,
-    );
-    const locationLabel = selectedUser.currentLocation || displayCity;
-    const userHandle = `@${selectedUser.name.toLowerCase().replace(/\s+/g, "")}`;
-    const canSendMessage = connectMessage.trim().length > 0;
-
-    return (
-      <div className="relative h-full">
-        <div className="pointer-events-none absolute inset-0 opacity-20">
-          <MapboxMap
-            users={usersForMap}
-            pois={filteredPois}
-            activeFilter={activeMapFilter}
-            onUserClick={() => {}}
-            onPoiClick={() => {}}
-            currentUserLocation={effectiveUserLocation}
-            showCurrentUserRadar={Boolean(
-              isAvailable &&
-                (activeMapFilter === "people" ||
-                  activeMapFilter === "highlights"),
-            )}
-          />
-        </div>
-
-        <div className="absolute inset-0 flex justify-end p-3 sm:p-6">
-          <motion.div
-            initial={{ x: 120, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 120, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 120, damping: 18 }}
-            className="relative flex h-full w-full max-w-md flex-col overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/70 text-white shadow-[0_48px_120px_rgba(5,6,24,0.7)] backdrop-blur-2xl"
-          >
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/15" />
-            <div className="pointer-events-none absolute -top-24 right-[-90px] h-72 w-72 rounded-full bg-sky-500/25 blur-[160px]" />
-            <div className="pointer-events-none absolute bottom-[-120px] left-[-90px] h-72 w-72 rounded-full bg-emerald-500/20 blur-[160px]" />
-
-            <div className="relative flex h-full flex-col">
-              <div className="flex items-center justify-between px-6 pt-6">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => handleUserSelect(null)}
-                  className="h-11 w-11 rounded-full border border-white/10 bg-white/5 text-white transition hover:bg-white/15"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-              </Button>
-                <motion.div
-                  className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.28em] text-white/60"
-                  animate={{ opacity: [0.6, 1, 0.6] }}
-                  transition={{
-                    duration: 6,
-                    repeat: Infinity,
-                    repeatType: "mirror",
-                  }}
-                >
-                  <Sparkles className="h-4 w-4 text-emerald-300" />
-                  Live
-                </motion.div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto px-6 pb-8">
-                <motion.div
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05, duration: 0.35, ease: "easeOut" }}
-                  className="relative mt-6 overflow-hidden rounded-[28px] border border-white/10 bg-white/10 p-6 shadow-[0_18px_45px_rgba(31,41,55,0.35)]"
-                >
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-white/10" />
-                  <div className="relative flex items-start gap-5">
-                    <div className="relative">
-                      <motion.span
-                        className="absolute inset-0 rounded-[24px] bg-gradient-to-br from-emerald-400 via-sky-400 to-indigo-500 blur-[35px]"
-                        animate={{
-                          opacity: [0.4, 0.8, 0.4],
-                          scale: [0.95, 1.05, 0.95],
-                        }}
-                        transition={{ duration: 6, repeat: Infinity }}
-                      />
-                      <Avatar className="relative h-20 w-20 rounded-[24px] border-4 border-white/40 shadow-[0_15px_35px_rgba(15,118,110,0.35)]">
-                        <AvatarImage
-                          src={selectedUser.image || "/placeholder.svg"}
-                          alt={selectedUser.name}
-                        />
-                        <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-sky-500 text-3xl font-bold text-white">
-                    {selectedUser.name[0]}
-                  </AvatarFallback>
-                </Avatar>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-emerald-300" />
-                        <span className="text-xs font-semibold uppercase tracking-[0.35em] text-white/60">
-                          Available now
-                        </span>
-                      </div>
-                <div>
-                        <h2 className="text-2xl font-semibold text-white">
-                          {selectedUser.name}
-                        </h2>
-                        <p className="text-sm text-white/70">
-                          {userHandle} · {distanceLabel}
-                        </p>
-                      </div>
-                </div>
-              </div>
-
-                  <div className="mt-5 flex flex-wrap items-center gap-3">
-                    {nativeLanguages.length > 0 && (
-                      <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70">
-                        <span className="font-semibold text-white/80">
-                          Native
-                        </span>
-                        {nativeLanguages.map((lang) => (
-                          <motion.span
-                            key={`native-${lang.language}`}
-                            className="text-xl"
-                            animate={{ rotate: [0, 6, -4, 0] }}
-                            transition={{
-                              duration: 4.2,
-                              repeat: Infinity,
-                              repeatType: "loop",
-                              delay: Math.random(),
-                            }}
-                          >
-                            {lang.flag}
-                          </motion.span>
-                        ))}
-                </div>
-                    )}
-                    {learningLanguages.length > 0 && (
-                      <div className="flex items-center gap-2 rounded-full border border-sky-400/40 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-100">
-                        <span className="font-semibold uppercase tracking-wide text-sky-200">
-                          Learning
-                  </span>
-                        {learningLanguages.map((lang) => (
-                          <motion.span
-                            key={`learn-${lang.language}`}
-                            className="text-xl"
-                            animate={{ rotate: [0, -5, 4, 0] }}
-                            transition={{
-                              duration: 4.6,
-                              repeat: Infinity,
-                              repeatType: "loop",
-                              delay: Math.random(),
-                            }}
-                          >
-                            {lang.flag}
-                          </motion.span>
-                        ))}
-                </div>
-                    )}
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.12, duration: 0.35, ease: "easeOut" }}
-                  className="mt-6 space-y-4 rounded-[28px] border border-white/10 bg-white/5 p-6"
-                >
-                  <div className="flex items-start gap-3">
-                    <Sparkles className="mt-0.5 h-5 w-5 text-emerald-300" />
-                    <div>
-                      <p className="text-sm leading-relaxed text-white/80">
-                        {selectedUser.bio}
-                      </p>
-                  </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedUser.languagesSpoken.map((lang, index) => (
-                      <span
-                        key={`${lang.language}-${index}`}
-                        className="flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur"
-                      >
-                        <span className="text-lg">{lang.flag}</span>
-                        <span className="tracking-wide">{lang.language}</span>
-                        <span className="text-[10px] uppercase text-white/50">
-                          {lang.level}
-                        </span>
-                      </span>
-                    ))}
-                </div>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.18, duration: 0.35, ease: "easeOut" }}
-                  className="mt-6 overflow-hidden rounded-[28px] border border-emerald-500/25 bg-gradient-to-br from-emerald-500/20 via-sky-500/10 to-indigo-500/20 p-6 shadow-[0_24px_60px_rgba(16,185,129,0.25)]"
-                >
-                  <div className="relative z-10 flex items-start justify-between gap-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-medium text-white">
-                        <span className="text-2xl">{availabilityEmoji}</span>
-                        <span>{timeLeftLabel}</span>
-                </div>
-                      <p className="text-sm text-white/80">
-                        {selectedUser.availableFor ||
-                          "Open for a relaxed language exchange."}
-                      </p>
-                      <div className="flex items-center gap-2 text-sm text-white/80">
-                        <MapPin className="h-4 w-4 text-emerald-200" />
-                        <span>{locationLabel}</span>
-              </div>
-                      </div>
-                    <div className="relative h-24 w-24 overflow-hidden rounded-2xl border border-white/30 bg-white/10">
-                      {mapPreviewUrl ? (
-                        <Image
-                          src={mapPreviewUrl}
-                          alt={`Map preview for ${displayCity}`}
-                          fill
-                          sizes="96px"
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-2xl">
-                          🗺️
-                    </div>
-                      )}
-                  </div>
-                </div>
-                  <div className="mt-4 flex items-center gap-3 text-xs text-emerald-100/80">
-                    <Sparkles className="h-4 w-4" />
-                    <span>
-                      Let’s make a plan right away — short notice meetups
-                      welcome.
-                    </span>
-              </div>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.24, duration: 0.35, ease: "easeOut" }}
-                  className="mt-6 grid gap-3 sm:grid-cols-3"
-                >
-                  <motion.button
-                    type="button"
-                    onClick={handleAskToMatch}
-                    disabled={isMatching}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    animate={
-                      isMatching ? { scale: [1, 1.08, 1] } : { scale: 1 }
-                    }
-                    transition={{ duration: 0.6 }}
-                    className="flex h-14 flex-col items-center justify-center rounded-2xl border border-rose-300/40 bg-gradient-to-br from-rose-500/40 to-rose-500/20 text-sm font-semibold text-rose-50 shadow-lg shadow-rose-500/25 transition disabled:opacity-70"
-                  >
-                    <Heart className="h-4 w-4" />
-                    Ask to Match
-                  </motion.button>
-                  <motion.button
-                    type="button"
-                    onClick={handleOpenChat}
-                    disabled={isOpeningChat}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    className="flex h-14 flex-col items-center justify-center rounded-2xl border border-emerald-400/50 bg-gradient-to-br from-emerald-500/70 via-teal-500/60 to-sky-500/70 text-sm font-semibold text-emerald-50 shadow-lg shadow-emerald-500/30 transition disabled:opacity-70"
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    Send Message
-                  </motion.button>
-                  <motion.button
-                    type="button"
-                    onClick={handleInviteToEvent}
-                    disabled={isInviting}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    className="flex h-14 flex-col items-center justify-center rounded-2xl border border-sky-400/50 bg-gradient-to-br from-sky-500/50 via-violet-500/45 to-indigo-500/45 text-sm font-semibold text-sky-50 shadow-lg shadow-sky-500/25 transition disabled:opacity-70"
-                  >
-                    <CalendarCheck className="h-4 w-4" />
-                    Invite to Event
-                  </motion.button>
-                </motion.div>
-              </div>
-
-              <div className="relative border-t border-white/10 bg-slate-950/60 px-6 py-5">
-                <AnimatePresence>
-                  {connectError && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 4 }}
-                      className="mb-3 flex items-center gap-2 rounded-2xl border border-rose-400/40 bg-rose-500/15 px-4 py-2 text-sm text-rose-100"
-                    >
-                      <AlertCircle className="h-4 w-4" />
-                      <span>{connectError}</span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
-                  <button
-                    type="button"
-                    className="text-white/60 transition hover:text-white"
-                    aria-label="Add emoji"
-                  >
-                    <Smile className="h-5 w-5" />
-                  </button>
-                  <input
-                    type="text"
-                    value={connectMessage}
-                    onChange={(event) => setConnectMessage(event.target.value)}
-                    placeholder={`Say hi to ${selectedUser.name.split(" ")[0]}...`}
-                    className="flex-1 bg-transparent text-sm text-white placeholder:text-white/50 focus:outline-none"
-                    disabled={isConnecting}
-                  />
-                  <button
-                    type="button"
-                    className="text-white/60 transition hover:text-white disabled:opacity-50"
-                    aria-label="Send voice note"
-                    disabled
-                  >
-                    <Mic className="h-5 w-5" />
-                  </button>
-                  <motion.button
-                    type="button"
-                    onClick={handleConnectAndChat}
-                    disabled={!canSendMessage || isConnecting}
-                    whileHover={{
-                      scale: canSendMessage && !isConnecting ? 1.05 : 1,
-                    }}
-                    whileTap={{
-                      scale: canSendMessage && !isConnecting ? 0.96 : 1,
-                    }}
-                    className={`inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 via-sky-400 to-indigo-500 text-slate-950 shadow-lg transition ${
-                      !canSendMessage || isConnecting ? "opacity-50" : ""
-                    }`}
-                  >
-                    {isConnecting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                  </motion.button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-          </div>
-        </div>
-    );
   }
+
+  const handleInviteToEvent = useCallback(
+    async (profile?: ProfileCardProfile) => {
+      const target = resolveProfileTarget(profile)
+      if (!target || isInviting) return
+
+      const firstName = target.user.name.split(" ")[0] ?? target.user.name
+      if (target.index !== -1 && target.index !== selectedUserIndex) {
+        setSelectedUserIndex(target.index)
+      }
+
+      setIsInviting(true)
+      try {
+        await connectionService.sendEventInvite(
+          target.user.id,
+          currentUserProfile?.full_name ?? undefined,
+        )
+
+        toast({
+          title: "Invite sent",
+          description: `We invited ${firstName} to meet up at the next event.`,
+        })
+      } catch (error: any) {
+        console.error("[MapView] Failed to send event invite:", error)
+        toast({
+          title: "Unable to send invite",
+          description: error?.message ?? "Please try again shortly.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsInviting(false)
+      }
+    },
+    [resolveProfileTarget, isInviting, selectedUserIndex, currentUserProfile?.full_name, toast],
+  )
+
+  const handleProfileFavoriteChange = useCallback(
+    async (profile: ProfileCardProfile, shouldFavorite: boolean) => {
+      const profileId = String(profile.id)
+      let previousHadFavorite = false
+
+      setFavoriteProfileIds((prev) => {
+        previousHadFavorite = prev.has(profileId)
+        const next = new Set(prev)
+        if (shouldFavorite) {
+          next.add(profileId)
+        } else {
+          next.delete(profileId)
+        }
+        return next
+      })
+
+      try {
+        const result = await connectionService.setFavorite(
+          profileId,
+          shouldFavorite,
+          currentUserProfile?.full_name ?? undefined,
+        )
+
+        if (shouldFavorite && result?.alreadyFavorited) {
+          toast({
+            title: "Already favorited",
+            description: `${profile.displayName} is already in your favorites.`,
+          })
+          return
+        }
+
+        toast({
+          title: shouldFavorite ? "Added to favorites ❤️" : "Removed from favorites",
+          description: shouldFavorite
+            ? `We'll keep ${profile.displayName} handy.`
+            : `${profile.displayName} is no longer in favorites.`,
+        })
+      } catch (error: any) {
+        console.error("[MapView] Failed to update favorites:", error)
+        setFavoriteProfileIds((prev) => {
+          const next = new Set(prev)
+          if (previousHadFavorite) {
+            next.add(profileId)
+          } else {
+            next.delete(profileId)
+          }
+          return next
+        })
+
+        toast({
+          title: "Unable to update favorites",
+          description: error?.message ?? "Please try again in a moment.",
+          variant: "destructive",
+        })
+      }
+    },
+    [currentUserProfile?.full_name, toast],
+  )
+
+  const favoriteIdList = useMemo(() => Array.from(favoriteProfileIds), [favoriteProfileIds])
+  const isProfileOpen = selectedUserIndex !== null && profileCardProfiles.length > 0
+
+  const handleAddNote = useCallback(
+    (profile?: ProfileCardProfile) => {
+      const name = profile?.displayName ?? selectedUser?.name
+      if (!name) return
+      const firstName = name.split(" ")[0]
+      toast({
+        title: "Saved to Notes",
+        description: `We’ll keep a note slot ready for ${firstName} soon.`,
+      })
+    },
+    [selectedUser, toast],
+  )
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-background">
-      <FilterPanel
-        isOpen={isFilterOpen}
-        onClose={() => setIsFilterOpen(false)}
-      />
+      <FilterPanel isOpen={isFilterOpen} onClose={() => setIsFilterOpen(false)} />
 
       {isLoading && (
         <div className="absolute inset-0 z-[1200] flex items-center justify-center bg-slate-950/70 backdrop-blur-md">
           <div className="text-center">
             <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-sky-500 border-t-transparent" />
-            <p className="text-sm text-slate-200/80">
-              Scanning for nearby partners...
-            </p>
+            <p className="text-sm text-slate-200/80">Scanning for nearby partners...</p>
           </div>
         </div>
       )}
@@ -1264,9 +1327,7 @@ export function MapView({
       {!isLoading && loadError && (
         <div className="absolute inset-x-4 top-20 z-[1200]">
           <div className="rounded-2xl border border-red-400/40 bg-red-500/20 px-4 py-3 text-sm text-red-100 shadow-xl backdrop-blur">
-            <p className="font-semibold">
-              We couldn&apos;t load nearby partners.
-            </p>
+            <p className="font-semibold">We couldn&apos;t load nearby partners.</p>
             <button
               type="button"
               onClick={handleRefresh}
@@ -1282,9 +1343,7 @@ export function MapView({
         <div className="absolute inset-0 z-[1100] flex items-center justify-center">
           <div className="pointer-events-auto max-w-sm rounded-3xl border border-white/10 bg-white/5 px-6 py-8 text-center text-white backdrop-blur-2xl shadow-2xl">
             <h3 className="text-lg font-semibold">No partners nearby yet</h3>
-            <p className="mt-2 text-sm text-white/70">
-              Adjust your availability window or refresh to widen the search.
-            </p>
+            <p className="mt-2 text-sm text-white/70">Adjust your availability window or refresh to widen the search.</p>
             <Button
               onClick={handleRefresh}
               className="mt-4 rounded-full bg-white/90 text-slate-900 hover:bg-white"
@@ -1305,15 +1364,10 @@ export function MapView({
           <div className="relative w-full max-w-md rounded-[32px] border border-white/10 bg-[#0b122a]/95 px-6 py-7 text-white shadow-[0_45px_120px_rgba(5,6,24,0.65)] backdrop-blur-[32px] sm:px-8">
             <div className="flex items-start justify-between gap-6">
               <div>
-                <p className="text-xs uppercase tracking-[0.35em] text-white/40">
-                  Set Availability
-                </p>
-                <h3 className="mt-2 text-2xl font-semibold">
-                  Let friends know you’re free
-                </h3>
+                <p className="text-xs uppercase tracking-[0.35em] text-white/40">Set Availability</p>
+                <h3 className="mt-2 text-2xl font-semibold">Let friends know you’re free</h3>
                 <p className="mt-1 text-sm text-white/60">
-                  Toggle your availability to show up for nearby learners in{" "}
-                  {displayCity}.
+                  Toggle your availability to show up for nearby learners in {displayCity}.
                 </p>
               </div>
               <button
@@ -1333,10 +1387,9 @@ export function MapView({
                     Available Now
                   </p>
                   <p className="mt-1 text-xs text-white/60">
-                    When enabled, other users can see you’re available for
-                    language exchange.
+                    When enabled, other users can see you’re available for language exchange.
                   </p>
-                  </div>
+                </div>
                 <motion.button
                   type="button"
                   onClick={handleToggleAvailability}
@@ -1384,11 +1437,11 @@ export function MapView({
                     </motion.span>
                   </motion.span>
                 </motion.button>
-                  </div>
-                </div>
+              </div>
+            </div>
 
             <AnimatePresence mode="wait">
-              {tempIsAvailable ? (
+            {tempIsAvailable ? (
                 <motion.div
                   key="availability-on"
                   initial={{ opacity: 0, y: 16 }}
@@ -1404,20 +1457,18 @@ export function MapView({
                     className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4"
                   >
                     <div className="flex flex-col gap-3">
-                  <div>
+                      <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/40">
                           Custom Message
                         </p>
                         <p className="mt-1 text-xs text-white/60">
                           Share what makes this availability window special.
                         </p>
-                  </div>
+                      </div>
                       <Textarea
                         value={tempAvailabilityMessage}
                         onChange={(event) =>
-                          setTempAvailabilityMessage(
-                            event.target.value.slice(0, 100),
-                          )
+                          setTempAvailabilityMessage(event.target.value.slice(0, 100))
                         }
                         maxLength={100}
                         rows={3}
@@ -1425,17 +1476,15 @@ export function MapView({
                         className="resize-none rounded-2xl border border-white/10 bg-slate-900/70 text-sm text-white placeholder:text-white/30 focus-visible:ring-1 focus-visible:ring-emerald-400/50"
                       />
                       <div className="flex items-center justify-between text-[11px] text-white/50">
-                        <span>
-                          {tempAvailabilityMessage.length}/100 characters
-                        </span>
+                        <span>{tempAvailabilityMessage.length}/100 characters</span>
                         <div className="flex items-center gap-1 text-white/60">
                           <Smile className="h-3.5 w-3.5 text-emerald-300" />
                           <span>Pick a vibe</span>
-                  </div>
-                </div>
+                        </div>
+                      </div>
                       <div className="flex items-center gap-2">
                         {AVAILABILITY_EMOJIS.map((emoji) => {
-                          const isActive = tempAvailabilityEmoji === emoji;
+                          const isActive = tempAvailabilityEmoji === emoji
                           return (
                             <motion.button
                               key={emoji}
@@ -1450,31 +1499,29 @@ export function MapView({
                             >
                               <span className="text-lg">{emoji}</span>
                             </motion.button>
-                          );
+                          )
                         })}
                       </div>
                     </div>
                   </motion.div>
 
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/40">
-                      Duration
-                    </p>
-                    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="mt-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/40">Duration</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                       {durationOptions.map((minutes) => {
-                        const isActive = tempAvailabilityDuration === minutes;
+                        const isActive = tempAvailabilityDuration === minutes
                         return (
                           <motion.button
-                            key={minutes}
+                        key={minutes}
                             type="button"
-                            onClick={() => setTempAvailabilityDuration(minutes)}
-                            disabled={isSavingAvailability}
+                        onClick={() => setTempAvailabilityDuration(minutes)}
+                        disabled={isSavingAvailability}
                             whileHover={{ scale: 1.03 }}
                             whileTap={{ scale: 0.97 }}
                             className={`relative overflow-hidden rounded-2xl border px-4 py-3 text-sm font-semibold transition-colors ${
                               isActive
                                 ? "border-emerald-400/80 bg-emerald-500/20 text-emerald-50"
-                                : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                            : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
                             } ${isSavingAvailability ? "cursor-not-allowed opacity-60" : ""}`}
                           >
                             <motion.span
@@ -1483,17 +1530,16 @@ export function MapView({
                               animate={{
                                 opacity: isActive ? 1 : 0,
                                 scale: isActive ? 1 : 0.9,
-                                boxShadow: isActive
-                                  ? "0 0 35px rgba(16,185,129,0.55)"
-                                  : "0 0 0 rgba(0,0,0,0)",
+                                boxShadow: isActive ? "0 0 35px rgba(16,185,129,0.55)" : "0 0 0 rgba(0,0,0,0)",
                               }}
                               transition={{ duration: 0.3 }}
                             />
                             <span className="relative z-10">{minutes}m</span>
                           </motion.button>
-                        );
+                        )
                       })}
-                  </div>
+                    </div>
+
                     <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
                       <Slider
                         value={[tempAvailabilityDuration]}
@@ -1501,59 +1547,47 @@ export function MapView({
                         max={120}
                         step={15}
                         onValueChange={(value) => {
-                          const [first] = value;
+                          const [first] = value
                           if (typeof first === "number") {
-                            setTempAvailabilityDuration(first);
+                            setTempAvailabilityDuration(first)
                           }
                         }}
                       />
                       <div className="mt-2 flex items-center justify-between text-xs text-white/50">
                         <span>Availability window</span>
                         <span>{tempAvailabilityDuration} minutes</span>
+                      </div>
                   </div>
                 </div>
-                  </div>
 
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                      delay: 0.05,
-                      duration: 0.25,
-                      ease: "easeOut",
-                    }}
+                    transition={{ delay: 0.05, duration: 0.25, ease: "easeOut" }}
                     className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/40">
-                        Location
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-white">
-                        {displayCity}
-                      </p>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/40">Location</p>
+                      <p className="mt-1 text-sm font-medium text-white">{displayCity}</p>
                       <p className="mt-1 text-xs text-white/50">
                         {currentCity
                           ? "Updated automatically from your latest check-in."
                           : "Using your default meetup city for now."}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
+                    </p>
+                  </div>
+                  <button
+                    type="button"
                       className="h-9 rounded-full border border-white/10 px-4 text-xs font-semibold text-sky-300 transition hover:bg-white/10"
-                    >
-                      Change
-              </button>
+                  >
+                    Change
+                  </button>
                   </motion.div>
 
                   {mapPreviewUrl && (
                     <motion.div
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{
-                        delay: 0.1,
-                        duration: 0.25,
-                        ease: "easeOut",
-                      }}
+                      transition={{ delay: 0.1, duration: 0.25, ease: "easeOut" }}
                       className="overflow-hidden rounded-2xl border border-white/10 bg-white/5"
                     >
                       <div className="relative h-40 w-full">
@@ -1565,7 +1599,7 @@ export function MapView({
                           className="object-cover"
                         />
                         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/40 via-slate-950/10 to-transparent" />
-            </div>
+                </div>
                       <div className="px-4 py-3 text-xs text-white/60">
                         Preview updates after you save your availability.
                       </div>
@@ -1575,16 +1609,11 @@ export function MapView({
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                      delay: 0.15,
-                      duration: 0.25,
-                      ease: "easeOut",
-                    }}
+                    transition={{ delay: 0.15, duration: 0.25, ease: "easeOut" }}
                     className="rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100 shadow-[0_18px_35px_rgba(16,185,129,0.15)]"
                   >
                     <span className="font-semibold text-emerald-100">
-                      {tempAvailabilityEmoji} {tempAvailabilityDuration} minutes
-                      live
+                      {tempAvailabilityEmoji} {tempAvailabilityDuration} minutes live
                     </span>
                     <p className="mt-1 text-sm text-emerald-50/90">
                       {tempAvailabilityMessage
@@ -1602,9 +1631,9 @@ export function MapView({
                   transition={{ duration: 0.25, ease: "easeOut" }}
                   className="mt-6 rounded-2xl border border-white/10 bg-white/5 px-4 py-5 text-center text-sm text-white/60"
                 >
-                  You&apos;re currently unavailable
+                You&apos;re currently unavailable
                 </motion.div>
-              )}
+            )}
             </AnimatePresence>
 
             {availabilityError && (
@@ -1630,7 +1659,12 @@ export function MapView({
         </div>
       )}
 
-      <div className="absolute top-4 left-4 right-4 z-[1000] pointer-events-none">
+      <div
+        className={`absolute top-4 left-4 right-4 z-[1000] pointer-events-none transition-opacity duration-300 ${
+          isProfileOpen ? "opacity-0" : "opacity-100"
+        }`}
+        aria-hidden={isProfileOpen}
+      >
         <div className="flex items-center justify-between">
         <Button
           size="icon"
@@ -1642,9 +1676,7 @@ export function MapView({
 
           <div className="glass-button pointer-events-auto flex items-center gap-2 rounded-full px-4 py-2">
           <Users className="h-4 w-4 text-white" />
-            <span className="text-sm font-semibold text-white">
-              {nearbyCount} nearby
-            </span>
+            <span className="text-sm font-semibold text-white">{nearbyCount} nearby</span>
         </div>
 
         <Button
@@ -1664,7 +1696,7 @@ export function MapView({
           <LayoutGroup>
             <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-2 backdrop-blur">
               {MAP_FILTERS.map((filter) => {
-                const isActive = activeMapFilter === filter.id;
+                const isActive = activeMapFilter === filter.id
                 return (
                   <motion.button
                     key={filter.id}
@@ -1677,21 +1709,15 @@ export function MapView({
                       <motion.span
                         layoutId="map-filter-pill"
                         className="absolute inset-0 rounded-full bg-white/15"
-                        transition={{
-                          type: "spring",
-                          stiffness: 420,
-                          damping: 32,
-                        }}
+                        transition={{ type: "spring", stiffness: 420, damping: 32 }}
                       />
                     )}
-                    <span className="relative text-lg leading-none">
-                      {filter.icon}
-                    </span>
+                    <span className="relative text-lg leading-none">{filter.icon}</span>
                     <span className="relative mt-1 text-[10px] font-semibold uppercase tracking-[0.25em]">
                       {filter.label}
                     </span>
                   </motion.button>
-                );
+                )
               })}
             </div>
           </LayoutGroup>
@@ -1706,16 +1732,40 @@ export function MapView({
           users={usersForMap}
           pois={filteredPois}
           activeFilter={activeMapFilter}
-          onUserClick={handleUserSelect}
+          onUserClick={(user) => handleUserSelect(user as MapUser)}
           onPoiClick={setSelectedPoi}
           currentUserLocation={effectiveUserLocation}
-          showCurrentUserRadar={Boolean(
-            isAvailable &&
-              (activeMapFilter === "people" ||
-                activeMapFilter === "highlights"),
-          )}
         />
       </div>
+
+      <AnimatePresence>
+        {selectedUserIndex !== null && profileCardProfiles.length > 0 && (
+          <motion.div
+            key="profile-card"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[2500]"
+          >
+            <ProfileCard
+              profiles={profileCardProfiles}
+              initialIndex={selectedUserIndex ?? 0}
+              onClose={closeProfileSheet}
+              onActiveIndexChange={(index) => setSelectedUserIndex(index)}
+              onAddNote={handleAddNote}
+              onAskToMatch={handleAskToMatch}
+              onSendMessage={handleOpenChat}
+              onInviteToEvent={handleInviteToEvent}
+              onFavoriteChange={handleProfileFavoriteChange}
+              favoriteIds={favoriteIdList}
+              isMatchPending={isMatching}
+              isMessagePending={isOpeningChat}
+              isInvitePending={isInviting}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {selectedPoi && (
@@ -1732,15 +1782,11 @@ export function MapView({
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">{selectedPoi.emoji}</span>
                   <div>
-                    <h3 className="text-lg font-semibold">
-                      {selectedPoi.title}
-                    </h3>
+                    <h3 className="text-lg font-semibold">{selectedPoi.title}</h3>
                     {selectedPoi.subtitle && (
-                      <p className="text-sm text-white/60">
-                        {selectedPoi.subtitle}
-                      </p>
+                      <p className="text-sm text-white/60">{selectedPoi.subtitle}</p>
                     )}
-    </div>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -1763,9 +1809,7 @@ export function MapView({
               </div>
 
               {selectedPoi.description && (
-                <p className="mt-4 text-sm text-white/70">
-                  {selectedPoi.description}
-                </p>
+                <p className="mt-4 text-sm text-white/70">{selectedPoi.description}</p>
               )}
 
               {selectedPoi.time && (
@@ -1792,5 +1836,5 @@ export function MapView({
         )}
       </AnimatePresence>
     </div>
-  );
+  )
 }

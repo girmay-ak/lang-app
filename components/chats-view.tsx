@@ -1,83 +1,95 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback } from "react"
-import { Card } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Search, Loader2 } from "lucide-react"
-import { ChatConversation } from "./chat-conversation"
-import { createClient } from "@/lib/supabase/client"
-import { formatDistanceToNow } from "date-fns"
-import { chatService } from "@/lib/services/chat-service"
+import { useState, useEffect, useCallback } from "react";
+import { Card } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Search, Loader2 } from "lucide-react";
+import { ChatConversation } from "./chat-conversation";
+import { createClient } from "@/lib/supabase/client";
+import { formatDistanceToNow } from "date-fns";
+import { chatService } from "@/lib/services/chat-service";
 
 interface Chat {
-  id: string
-  name: string
-  avatar: string
-  lastMessage: string
-  timeAgo: string
-  online: boolean
-  unread?: boolean
-  isGroup?: boolean
-  badges?: { label: string; variant: "default" | "secondary" | "destructive" }[]
-  otherUserId: string
+  id: string;
+  name: string;
+  avatar: string;
+  lastMessage: string;
+  timeAgo: string;
+  online: boolean;
+  unread?: boolean;
+  isGroup?: boolean;
+  badges?: {
+    label: string;
+    variant: "default" | "secondary" | "destructive";
+  }[];
+  otherUserId: string;
 }
 
 interface Conversation {
-  id: string
-  user1_id: string
-  user2_id: string
-  last_message: string | null
-  last_message_at: string | null
-  user1_unread_count: number
-  user2_unread_count: number
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  last_message: string | null;
+  last_message_at: string | null;
+  user1_unread_count: number;
+  user2_unread_count: number;
   other_user: {
-    id: string
-    full_name: string
-    avatar_url: string | null
-    is_online: boolean
-  }
+    id: string;
+    full_name: string;
+    avatar_url: string | null;
+    is_online: boolean;
+  };
 }
 
 interface ChatsViewProps {
-  onChatOpenChange?: (isOpen: boolean) => void
+  onChatOpenChange?: (isOpen: boolean) => void;
   launchChat?: {
-    conversationId: string
-    otherUserId: string
-    name: string
-    avatar: string
-    online: boolean
-  } | null
-  onLaunchHandled?: () => void
+    conversationId: string;
+    otherUserId: string;
+    name: string;
+    avatar: string;
+    online: boolean;
+  } | null;
+  onLaunchHandled?: () => void;
+  onUnreadCountChange?: (count: number) => void;
 }
 
-export function ChatsView({ onChatOpenChange, launchChat, onLaunchHandled }: ChatsViewProps) {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
-  const [chats, setChats] = useState<Chat[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [requests, setRequests] = useState<Array<{ id: string; avatar: string }>>([])
+export function ChatsView({
+  onChatOpenChange,
+  launchChat,
+  onLaunchHandled,
+  onUnreadCountChange,
+}: ChatsViewProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [requests, setRequests] = useState<
+    Array<{ id: string; avatar: string }>
+  >([]);
 
   const loadChats = useCallback(async () => {
     try {
-      setIsLoading(true)
-      const supabase = createClient()
+      setIsLoading(true);
+      const supabase = createClient();
 
       const {
         data: { session },
-      } = await supabase.auth.getSession()
+      } = await supabase.auth.getSession();
 
       if (!session) {
-        setIsLoading(false)
-        return
+        setIsLoading(false);
+        return;
       }
 
-      const userId = session.user.id
+      const userId = session.user.id;
 
       const { data: conversations, error } = await supabase
         .from("conversations")
-        .select(`
+        .select(
+          `
           id,
           user1_id,
           user2_id,
@@ -87,32 +99,37 @@ export function ChatsView({ onChatOpenChange, launchChat, onLaunchHandled }: Cha
           user2_unread_count,
           user1:users!conversations_user1_id_fkey(id, full_name, avatar_url, is_online),
           user2:users!conversations_user2_id_fkey(id, full_name, avatar_url, is_online)
-        `)
+        `,
+        )
         .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
-        .order("last_message_at", { ascending: false, nullsLast: true })
+        .order("last_message_at", { ascending: false, nullsLast: true });
 
       if (error) {
-        let errorData: any = {}
+        let errorData: any = {};
         try {
-          const errorJson = JSON.stringify(error, null, 2)
-          errorData = JSON.parse(errorJson)
+          const errorJson = JSON.stringify(error, null, 2);
+          errorData = JSON.parse(errorJson);
           console.error("[v0] Error fetching conversations:", {
             message: errorData.message || "Unknown error",
             code: errorData.code || "unknown",
             details: errorData.details || null,
             hint: errorData.hint || null,
-          })
+          });
         } catch (e) {
-          console.error("[v0] Error fetching conversations:", error)
+          console.error("[v0] Error fetching conversations:", error);
         }
-        setIsLoading(false)
-        return
+        setIsLoading(false);
+        return;
       }
 
       const formattedChats: Chat[] = (conversations || []).map((conv: any) => {
-        const otherUserId = conv.user1_id === userId ? conv.user2_id : conv.user1_id
-        const otherUser = conv.user1_id === userId ? conv.user2 : conv.user1
-        const unreadCount = conv.user1_id === userId ? conv.user1_unread_count : conv.user2_unread_count
+        const otherUserId =
+          conv.user1_id === userId ? conv.user2_id : conv.user1_id;
+        const otherUser = conv.user1_id === userId ? conv.user2 : conv.user1;
+        const unreadCount =
+          conv.user1_id === userId
+            ? conv.user1_unread_count
+            : conv.user2_unread_count;
 
         return {
           id: conv.id,
@@ -120,47 +137,61 @@ export function ChatsView({ onChatOpenChange, launchChat, onLaunchHandled }: Cha
           avatar: otherUser?.avatar_url || "/placeholder-user.jpg",
           lastMessage: conv.last_message || "No messages yet",
           timeAgo: conv.last_message_at
-            ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true })
+            ? formatDistanceToNow(new Date(conv.last_message_at), {
+                addSuffix: true,
+              })
             : "Never",
           online: otherUser?.is_online || false,
           unread: unreadCount > 0,
           otherUserId,
-        }
-      })
+        };
+      });
 
-      setChats(formattedChats)
-      setRequests([])
+      setChats(formattedChats);
+      setRequests([]);
     } catch (error) {
       console.error("[v0] Error loading chats:", {
         message: error instanceof Error ? error.message : String(error),
-        error: error instanceof Error ? error.stack : JSON.stringify(error, Object.getOwnPropertyNames(error)),
-      })
+        error:
+          error instanceof Error
+            ? error.stack
+            : JSON.stringify(error, Object.getOwnPropertyNames(error)),
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    loadChats()
-  }, [loadChats])
+    loadChats();
+  }, [loadChats]);
 
   useEffect(() => {
-    if (!launchChat) return
-    let cancelled = false
+    onUnreadCountChange?.(chats.filter((chat) => chat.unread).length);
+  }, [chats, onUnreadCountChange]);
+
+  useEffect(() => {
+    if (!launchChat) return;
+    let cancelled = false;
 
     async function openChat() {
       try {
-        const preview = await chatService.getConversationPreview(launchChat.conversationId)
-        if (cancelled) return
+        const preview = await chatService.getConversationPreview(
+          launchChat.conversationId,
+        );
+        if (cancelled) return;
 
         const chatData: Chat = preview
           ? {
               id: preview.id,
               name: preview.name,
               avatar: preview.avatar || "/placeholder-user.jpg",
-              lastMessage: preview.lastMessage || "Say hello to start chatting!",
+              lastMessage:
+                preview.lastMessage || "Say hello to start chatting!",
               timeAgo: preview.lastMessageAt
-                ? formatDistanceToNow(new Date(preview.lastMessageAt), { addSuffix: true })
+                ? formatDistanceToNow(new Date(preview.lastMessageAt), {
+                    addSuffix: true,
+                  })
                 : "Just now",
               online: preview.online,
               unread: (preview.unreadCount ?? 0) > 0,
@@ -175,46 +206,51 @@ export function ChatsView({ onChatOpenChange, launchChat, onLaunchHandled }: Cha
               online: launchChat.online,
               unread: false,
               otherUserId: launchChat.otherUserId,
-            }
+            };
 
         setChats((prev) => {
-          const existingIndex = prev.findIndex((chat) => chat.id === chatData.id)
+          const existingIndex = prev.findIndex(
+            (chat) => chat.id === chatData.id,
+          );
           if (existingIndex !== -1) {
-            const updated = [...prev]
-            updated[existingIndex] = { ...chatData, unread: prev[existingIndex].unread }
-            return updated
+            const updated = [...prev];
+            updated[existingIndex] = {
+              ...chatData,
+              unread: prev[existingIndex].unread,
+            };
+            return updated;
           }
-          return [chatData, ...prev]
-        })
+          return [chatData, ...prev];
+        });
 
-        setSelectedChat(chatData)
-        onChatOpenChange?.(true)
+        setSelectedChat(chatData);
+        onChatOpenChange?.(true);
       } catch (error) {
-        console.error("[ChatsView] Failed to open chat:", error)
+        console.error("[ChatsView] Failed to open chat:", error);
       } finally {
-        onLaunchHandled?.()
+        onLaunchHandled?.();
       }
     }
 
-    openChat()
+    openChat();
 
     return () => {
-      cancelled = true
-    }
-  }, [launchChat, onChatOpenChange, onLaunchHandled])
+      cancelled = true;
+    };
+  }, [launchChat, onChatOpenChange, onLaunchHandled]);
 
   const handleChatSelect = (chat: Chat) => {
-    setSelectedChat(chat)
-    onChatOpenChange?.(true)
-  }
+    setSelectedChat(chat);
+    onChatOpenChange?.(true);
+  };
 
   const handleChatBack = () => {
-    setSelectedChat(null)
-    onChatOpenChange?.(false)
-  }
+    setSelectedChat(null);
+    onChatOpenChange?.(false);
+  };
 
   if (selectedChat) {
-    return <ChatConversation chat={selectedChat} onBack={handleChatBack} />
+    return <ChatConversation chat={selectedChat} onBack={handleChatBack} />;
   }
 
   if (isLoading) {
@@ -225,7 +261,7 @@ export function ChatsView({ onChatOpenChange, launchChat, onLaunchHandled }: Cha
           <p className="text-white/60">Loading chats...</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -277,63 +313,77 @@ export function ChatsView({ onChatOpenChange, launchChat, onLaunchHandled }: Cha
         {chats.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-white/60">No conversations yet</p>
-            <p className="text-white/40 text-sm mt-2">Start a conversation from the map or feed!</p>
+            <p className="text-white/40 text-sm mt-2">
+              Start a conversation from the map or feed!
+            </p>
           </div>
         ) : (
           chats
-            .filter((chat) => 
-              chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+            .filter(
+              (chat) =>
+                chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                chat.lastMessage
+                  .toLowerCase()
+                  .includes(searchQuery.toLowerCase()),
             )
             .map((chat) => (
-          <Card
-            key={chat.id}
-            className="bg-slate-800/50 backdrop-blur-xl border-white/10 p-4 rounded-3xl hover:bg-slate-800/70 transition-all cursor-pointer"
-            onClick={() => handleChatSelect(chat)}
-          >
-            <div className="flex items-start gap-3">
-              <div className="relative flex-shrink-0">
-                <Avatar className="h-14 w-14 border-2 border-white/20">
-                  <AvatarImage src={chat.avatar || "/placeholder.svg"} alt={chat.name} />
-                  <AvatarFallback>{chat.name[0]}</AvatarFallback>
-                </Avatar>
-                {chat.online && (
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-800" />
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-semibold text-white truncate">{chat.name}</h3>
-                  <span className="text-xs text-white/50 flex-shrink-0 ml-2">{chat.timeAgo}</span>
-                </div>
-
-                <p className="text-sm text-white/60 truncate mb-2">{chat.lastMessage}</p>
-
-                {chat.badges && (
-                  <div className="flex flex-wrap gap-2">
-                    {chat.badges.map((badge, idx) => (
-                      <Badge
-                        key={idx}
-                        className={
-                          badge.variant === "default"
-                            ? "bg-yellow-500 text-yellow-900 hover:bg-yellow-600"
-                            : badge.variant === "secondary"
-                              ? "bg-orange-500 text-orange-900 hover:bg-orange-600"
-                              : "bg-red-500 text-red-900 hover:bg-red-600"
-                        }
-                      >
-                        {badge.label}
-                      </Badge>
-                    ))}
+              <Card
+                key={chat.id}
+                className="bg-slate-800/50 backdrop-blur-xl border-white/10 p-4 rounded-3xl hover:bg-slate-800/70 transition-all cursor-pointer"
+                onClick={() => handleChatSelect(chat)}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="relative flex-shrink-0">
+                    <Avatar className="h-14 w-14 border-2 border-white/20">
+                      <AvatarImage
+                        src={chat.avatar || "/placeholder.svg"}
+                        alt={chat.name}
+                      />
+                      <AvatarFallback>{chat.name[0]}</AvatarFallback>
+                    </Avatar>
+                    {chat.online && (
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-800" />
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
-          </Card>
-        ))
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-semibold text-white truncate">
+                        {chat.name}
+                      </h3>
+                      <span className="text-xs text-white/50 flex-shrink-0 ml-2">
+                        {chat.timeAgo}
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-white/60 truncate mb-2">
+                      {chat.lastMessage}
+                    </p>
+
+                    {chat.badges && (
+                      <div className="flex flex-wrap gap-2">
+                        {chat.badges.map((badge, idx) => (
+                          <Badge
+                            key={idx}
+                            className={
+                              badge.variant === "default"
+                                ? "bg-yellow-500 text-yellow-900 hover:bg-yellow-600"
+                                : badge.variant === "secondary"
+                                  ? "bg-orange-500 text-orange-900 hover:bg-orange-600"
+                                  : "bg-red-500 text-red-900 hover:bg-red-600"
+                            }
+                          >
+                            {badge.label}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))
         )}
       </div>
     </div>
-  )
+  );
 }
