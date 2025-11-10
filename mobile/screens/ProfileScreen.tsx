@@ -1,231 +1,504 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Alert, Modal } from 'react-native'
+import React, { useEffect, useMemo, useState } from 'react'
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  Alert,
+  Share,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
+import * as ImagePicker from 'expo-image-picker'
+import {
+  ArrowLeft,
+  Settings,
+  ShoppingBag,
+  Camera,
+  MapPin,
+  Share2,
+  QrCode,
+  Link as LinkIcon,
+  BarChart3,
+  Award,
+  Star,
+  Calendar,
+  LogOut,
+  Crown,
+} from 'lucide-react-native'
+
 import { Colors } from '../constants/Colors'
-import { Settings, MapPin, Star, Trophy, Target, LogOut, Edit3, ChevronRight, Flame, Calendar, Clock, Users, Sparkles, Crown, MessageCircle, ArrowLeft, X } from 'lucide-react-native'
-import Animated, { FadeInDown, FadeInUp, SlideInRight, ZoomIn, BounceIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming, interpolate, Extrapolate, withSpring } from 'react-native-reanimated'
-import { createClient } from '../lib/supabase'
 import { useNavigation } from '@react-navigation/native'
-import { scale } from '../utils/responsive'
+import { createClient } from '../lib/supabase'
 import { useUser } from '../src/services/hooks/useUser'
-import * as Location from 'expo-location'
-import { useMap } from '../src/services/hooks/useMap'
+import { scale } from '../utils/responsive'
 
-const { width } = Dimensions.get('window')
+type AvailabilityStatus = 'available' | 'busy' | 'offline'
 
-interface User {
+interface LanguageDisplay {
+  code: string
+  name: string
+  flag: string
+  level: string
+  progress: number
+  description: string
+}
+
+interface Goal {
   id: string
-  full_name: string
-  avatar_url: string | null
-  bio: string | null
-  languages_speak: string[]
-  languages_learn: string[]
-  city: string | null
+  text: string
+  completed: boolean
 }
 
-// Animated floating particles component
-const FloatingParticle = ({ delay = 0, size = 4 }: { delay?: number; size?: number }) => {
-  const translateY = useSharedValue(0)
-  const opacity = useSharedValue(0.3)
-
-  useEffect(() => {
-    translateY.value = withRepeat(
-      withTiming(-100, { duration: 3000 + delay * 100 }),
-      -1,
-      false
-    )
-    opacity.value = withRepeat(
-      withTiming(0, { duration: 3000 + delay * 100 }),
-      -1,
-      false
-    )
-  }, [])
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-    opacity: opacity.value,
-  }))
-
-  const startLeft = Math.random() * width
-  const startTop = Dimensions.get('window').height * 0.8
-
-  return (
-    <Animated.View
-      style={[
-        {
-          position: 'absolute',
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: Colors.accent.primary,
-          left: startLeft,
-          top: startTop,
-        },
-        animatedStyle,
-      ]}
-    />
-  )
+interface Badge {
+  id: string
+  icon: string
+  name: string
+  earned: boolean
 }
 
-// Animated stat card component
-const AnimatedStatCard = ({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) => {
-  return (
-    <Animated.View entering={FadeInUp.delay(delay).duration(400)}>
-      {children}
-    </Animated.View>
-  )
+interface Review {
+  id: string
+  author: string
+  text: string
+  timeAgo: string
+  rating: number
 }
 
-// Helper function to calculate distance between two coordinates
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371 // Earth's radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
+interface Highlight {
+  id: string
+  icon: string
+  title: string
+  subtitle: string
 }
 
-// Helper function to get language flag emoji
-// Handles both language codes (en, nl, es) and full names (English, Dutch, Spanish)
-function getLanguageFlag(lang: string): string {
-  const flagMap: Record<string, string> = {
-    // Language codes (from database)
-    'en': '🇬🇧',
-    'nl': '🇳🇱',
-    'es': '🇪🇸',
-    'fr': '🇫🇷',
-    'de': '🇩🇪',
-    'it': '🇮🇹',
-    'pt': '🇵🇹',
-    'ja': '🇯🇵',
-    'ar': '🇸🇦',
-    'sv': '🇸🇪',
-    // Full names (fallback)
-    'English': '🇬🇧',
-    'Dutch': '🇳🇱',
-    'Spanish': '🇪🇸',
-    'French': '🇫🇷',
-    'German': '🇩🇪',
-    'Italian': '🇮🇹',
-    'Portuguese': '🇵🇹',
-    'Japanese': '🇯🇵',
-    'Arabic': '🇸🇦',
-    'Swedish': '🇸🇪',
+interface Challenge {
+  id: string
+  text: string
+  progress: number
+  total: number
+  xpReward: number
+  completed: boolean
+}
+
+const LANGUAGE_LIBRARY: Record<
+  string,
+  {
+    name: string
+    flag: string
+    nativeDescription: string
+    learningDescription: string
+    learningProgress: number
   }
-  return flagMap[lang] || '🌍'
+> = {
+  en: {
+    name: 'English',
+    flag: '🇬🇧',
+    nativeDescription: 'Business English, Tech vocabulary',
+    learningDescription: 'Improving storytelling and debate skills',
+    learningProgress: 88,
+  },
+  nl: {
+    name: 'Dutch',
+    flag: '🇳🇱',
+    nativeDescription: 'Casual chats, cultural insights',
+    learningDescription: 'Daily conversations, work Dutch',
+    learningProgress: 65,
+  },
+  es: {
+    name: 'Spanish',
+    flag: '🇪🇸',
+    nativeDescription: 'Latin American expressions, travel Spanish',
+    learningDescription: 'Small talk, travel scenarios, music lyrics',
+    learningProgress: 54,
+  },
+  fr: {
+    name: 'French',
+    flag: '🇫🇷',
+    nativeDescription: 'Accent coaching, professional writing',
+    learningDescription: 'Conversational confidence, café culture',
+    learningProgress: 42,
+  },
+  de: {
+    name: 'German',
+    flag: '🇩🇪',
+    nativeDescription: 'Exam prep, pronunciation drills',
+    learningDescription: 'Business meetings, job interviews',
+    learningProgress: 55,
+  },
+  ja: {
+    name: 'Japanese',
+    flag: '🇯🇵',
+    nativeDescription: 'Anime, pop culture, native expressions',
+    learningDescription: 'Casual chats, travel essentials',
+    learningProgress: 37,
+  },
+}
+
+const DEFAULT_STATS = {
+  trades: 47,
+  streak: 30,
+  rating: 5.0,
+  hours: 245,
+  badges: 24,
+  friends: 156,
+}
+
+const DEFAULT_GOALS: Goal[] = [
+  { id: 'goal-1', text: 'Have 10-minute conversation in Dutch', completed: true },
+  { id: 'goal-2', text: 'Order food at restaurant', completed: true },
+  { id: 'goal-3', text: 'Watch Dutch movie without subtitles', completed: false },
+  { id: 'goal-4', text: 'Read Dutch newspaper', completed: false },
+  { id: 'goal-5', text: 'Pass B1 Dutch exam', completed: false },
+]
+
+const DEFAULT_BADGES: Badge[] = [
+  { id: 'badge-1', icon: '🎖️', name: 'Language Trader', earned: true },
+  { id: 'badge-2', icon: '⭐', name: 'Early Adopter', earned: true },
+  { id: 'badge-3', icon: '🔥', name: '30-Day Streak', earned: true },
+  { id: 'badge-4', icon: '🌟', name: 'Verified User', earned: true },
+  { id: 'badge-5', icon: '💬', name: '100 Convos', earned: true },
+  { id: 'badge-6', icon: '☕', name: 'Coffee Enthusiast', earned: true },
+  { id: 'badge-7', icon: '🎯', name: 'Goal Crusher', earned: true },
+  { id: 'badge-8', icon: '📚', name: 'Practice Master', earned: true },
+]
+
+const DEFAULT_REVIEWS: Review[] = [
+  {
+    id: 'review-1',
+    rating: 5,
+    text: 'Great teacher! Very patient and encouraging.',
+    author: 'Sarah',
+    timeAgo: '2 days ago',
+  },
+  {
+    id: 'review-2',
+    rating: 5,
+    text: 'Amazing conversation partner! Keeps things fun.',
+    author: 'Mike',
+    timeAgo: '1 week ago',
+  },
+]
+
+const DEFAULT_HIGHLIGHTS: Highlight[] = [
+  { id: 'highlight-1', icon: '🏆', title: 'Language Café Member', subtitle: 'Active in Den Haag community' },
+  { id: 'highlight-2', icon: '🔥', title: 'Consistency Spark', subtitle: '30-day streak alive!' },
+  { id: 'highlight-3', icon: '⭐', title: 'Top Rated Exchange', subtitle: '5.0 rating from 47 sessions' },
+]
+
+const DEFAULT_CHALLENGES: Challenge[] = [
+  { id: 'challenge-1', text: 'Practice for 15 minutes', progress: 15, total: 15, xpReward: 20, completed: true },
+  { id: 'challenge-2', text: 'Send 5 messages', progress: 3, total: 5, xpReward: 10, completed: false },
+  { id: 'challenge-3', text: 'Meet someone new', progress: 0, total: 1, xpReward: 25, completed: false },
+]
+
+const AVAILABILITY_PRESETS = {
+  nextWindow: 'Next 30 minutes',
+  idealSession: '30m',
+  bestTime: 'Evenings',
+  preferredSpot: 'Centrum',
+  locations: ['Coffee shops in Centrum', 'Public libraries', 'Parks when weather is nice'],
+}
+
+const XP_TRACK = {
+  level: 12,
+  title: 'Language Enthusiast',
+  current: 420,
+  target: 600,
+}
+
+function formatJoinDate(rawDate?: string | null) {
+  try {
+    if (!rawDate) return 'Nov 2025'
+    const date = new Date(rawDate)
+    if (Number.isNaN(date.getTime())) return 'Nov 2025'
+    return new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }).format(date)
+  } catch (error) {
+    console.warn('[ProfileScreen] Failed to format join date:', error)
+    return 'Nov 2025'
+  }
+}
+
+function getLanguageDetails(codeOrName: string, type: 'native' | 'learning'): LanguageDisplay {
+  const key = codeOrName?.toLowerCase?.() || codeOrName
+  const libraryEntry = LANGUAGE_LIBRARY[key]
+  const fallbackName = codeOrName?.length <= 3 ? codeOrName.toUpperCase() : codeOrName
+  const name = libraryEntry?.name || fallbackName || 'Unknown'
+  const flag = libraryEntry?.flag || '🌍'
+  const description =
+    type === 'native'
+      ? libraryEntry?.nativeDescription || 'Happy to help with native-level nuances'
+      : libraryEntry?.learningDescription || 'Excited to grow this language!'
+
+  const progress = type === 'native' ? 100 : libraryEntry?.learningProgress || 60
+
+  return {
+    code: codeOrName,
+    name,
+    flag,
+    level: type === 'native' ? 'NATIVE' : 'LEARNING',
+    progress,
+    description,
+  }
+}
+
+function ChallengeProgress({ progress, total, completed }: { progress: number; total: number; completed: boolean }) {
+  const width = total === 0 ? 0 : `${Math.min(100, Math.round((progress / total) * 100))}%`
+  return (
+    <View style={styles.challengeProgressBar}>
+      <View style={[styles.challengeProgressFill, completed && styles.challengeProgressFillCompleted, { width }]} />
+    </View>
+  )
+}
+
+function SectionCard({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <View style={styles.sectionCard}>
+      <View style={styles.sectionHeader}>
+        {icon}
+        <Text style={styles.sectionHeaderText}>{title}</Text>
+      </View>
+      {children}
+    </View>
+  )
+}
+
+function StatCard({ value, label }: { value: string; label: string }) {
+  return (
+    <View style={styles.statCard}>
+      <Text style={styles.statCardValue}>{value}</Text>
+      <Text style={styles.statCardLabel}>{label}</Text>
+    </View>
+  )
+}
+
+function LanguageCard({ item }: { item: LanguageDisplay }) {
+  return (
+    <View style={styles.languageCard}>
+      <View style={styles.languageHeader}>
+        <Text style={styles.languageFlag}>{item.flag}</Text>
+        <View>
+          <Text style={styles.languageName}>{item.name}</Text>
+          <Text style={styles.languageLevel}>{item.level}</Text>
+        </View>
+      </View>
+      <View style={styles.languageProgressBar}>
+        <View style={[styles.languageProgressFill, { width: `${item.progress}%` }]} />
+      </View>
+      <Text style={styles.languageDescription}>"{item.description}"</Text>
+    </View>
+  )
+}
+
+function BadgeCard({ badge }: { badge: Badge }) {
+  return (
+    <View style={[styles.badgeCard, !badge.earned && styles.badgeCardLocked]}>
+      <Text style={styles.badgeIcon}>{badge.icon}</Text>
+      <Text style={styles.badgeName}>{badge.name}</Text>
+    </View>
+  )
+}
+
+function ReviewCard({ review }: { review: Review }) {
+  return (
+    <View style={styles.reviewCard}>
+      <Text style={styles.reviewStars}>{'⭐'.repeat(review.rating)}</Text>
+      <Text style={styles.reviewText}>"{review.text}"</Text>
+      <Text style={styles.reviewAuthor}>- {review.author}, {review.timeAgo}</Text>
+    </View>
+  )
+}
+
+function HighlightCard({ highlight }: { highlight: Highlight }) {
+  return (
+    <View style={styles.highlightCard}>
+      <Text style={styles.highlightIcon}>{highlight.icon}</Text>
+      <View>
+        <Text style={styles.highlightTitle}>{highlight.title}</Text>
+        <Text style={styles.highlightSubtitle}>{highlight.subtitle}</Text>
+      </View>
+    </View>
+  )
+}
+
+function ChallengeCard({ challenge }: { challenge: Challenge }) {
+  return (
+    <View style={styles.challengeCard}>
+      <View style={styles.challengeRow}>
+        <Text style={[styles.challengeText, challenge.completed && styles.challengeTextCompleted]}>
+          {challenge.completed ? '✅' : '⏳'} {challenge.text} ({challenge.progress}/{challenge.total})
+        </Text>
+        <Text style={styles.challengeReward}>{challenge.completed ? 'COMPLETE! + XP' : `+${challenge.xpReward} XP`}</Text>
+      </View>
+      <ChallengeProgress progress={challenge.progress} total={challenge.total} completed={challenge.completed} />
+    </View>
+  )
 }
 
 export default function ProfileScreen() {
   const navigation = useNavigation()
-  const pulseScale = useSharedValue(1)
-  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null)
-  const [languageModalVisible, setLanguageModalVisible] = useState(false)
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
-  const [nearbyUsers, setNearbyUsers] = useState<any[]>([])
-  
-  // Use real backend hook
   const { user, loading: isLoading, error } = useUser()
-  const { users: mapNearbyUsers } = useMap({
-    distance: 50,
-    availableNow: false,
-    languages: [],
-    skillLevel: [],
-  })
+  const [photoUri, setPhotoUri] = useState<string | null>(user?.avatar_url ?? null)
+  const [availabilityStatus, setAvailabilityStatus] = useState<AvailabilityStatus>(user?.availability_status ?? 'available')
 
   useEffect(() => {
-    pulseScale.value = withRepeat(
-      withTiming(1.05, { duration: 2000 }),
-      -1,
-      true
-    )
-  }, [])
+    if (user?.avatar_url) {
+      setPhotoUri(user.avatar_url)
+    }
+  }, [user?.avatar_url])
 
-  // Get user's current location
   useEffect(() => {
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync()
-        if (status !== 'granted') {
-          console.log('Location permission denied')
+    if (user?.availability_status) {
+      setAvailabilityStatus(user.availability_status)
+    }
+  }, [user?.availability_status])
+
+  const profileName = user?.full_name || 'Araya'
+  const profileEmail = user?.email || 'girmaynl21@gmail.com'
+  const profileLocation = user?.city || 'Den Haag'
+  const joinedDate = formatJoinDate(user?.last_active_at)
+  const isAvailable = availabilityStatus === 'available'
+
+  const languageNative = useMemo(() => {
+    if (user?.languages_speak?.length) {
+      return user.languages_speak.map((code) => getLanguageDetails(code, 'native'))
+    }
+    return [getLanguageDetails('en', 'native')]
+  }, [user?.languages_speak])
+
+  const languageLearning = useMemo(() => {
+    if (user?.languages_learn?.length) {
+      return user.languages_learn.map((code) => getLanguageDetails(code, 'learning'))
+    }
+    return [getLanguageDetails('nl', 'learning')]
+  }, [user?.languages_learn])
+
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack()
+    } else {
+      navigation.navigate('Home' as never)
+    }
+  }
+
+  const handlePickImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission needed', 'We need access to your photos to update your avatar.')
           return
         }
-        const location = await Location.getCurrentPositionAsync({})
-        setUserLocation({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        })
-      } catch (error) {
-        console.error('Error getting location:', error)
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      })
+
+      if (!result.canceled) {
+        const uri = result.assets[0]?.uri
+        if (uri) {
+          setPhotoUri(uri)
+          Alert.alert('Profile photo updated', 'The new photo will be uploaded on your next sync.')
+        }
       }
-    })()
-  }, [])
-
-  // Fetch nearby users when language is selected
-  useEffect(() => {
-    if (selectedLanguage && userLocation && mapNearbyUsers) {
-      // Filter nearby users from map hook by selected language
-      const filtered = mapNearbyUsers.filter((u: any) => 
-        (u.languages_speak || []).includes(selectedLanguage) ||
-        (u.languages_learn || []).includes(selectedLanguage)
-      )
-      setNearbyUsers(filtered)
-    } else {
-      setNearbyUsers([])
+    } catch (err) {
+      console.error('[ProfileScreen] pick image error', err)
+      Alert.alert('Something went wrong', 'Unable to update your photo right now.')
     }
-  }, [selectedLanguage, userLocation, mapNearbyUsers])
-
-  const handleLanguageClick = (language: string) => {
-    setSelectedLanguage(language)
-    setLanguageModalVisible(true)
   }
 
-  const formatDistance = (distance: number): string => {
-    if (distance < 1) {
-      return `${Math.round(distance * 1000)}m`
+  const handleShareProfile = async () => {
+    try {
+      await Share.share({
+        message: `Check out my LangEx profile! Join me for language practice: https://langex.app/profile/${user?.id || 'me'}`,
+      })
+    } catch (err) {
+      console.error('[ProfileScreen] share error', err)
     }
-    return `${distance.toFixed(1)}km`
   }
 
-  const avatarAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulseScale.value }],
-  }))
+  const handleOpenSettings = () => {
+    Alert.alert('Settings', 'Profile settings coming soon!')
+  }
+
+  const handleOpenStore = () => {
+    Alert.alert('Marketplace', 'Language perks store launching soon.')
+  }
+
+  const handleEditProfile = () => {
+    Alert.alert('Edit Profile', 'Profile editing experience is coming soon.')
+  }
+
+  const handleEditLanguages = () => {
+    Alert.alert('Languages', 'Manage your languages from the desktop app for now.')
+  }
+
+  const handleEditBio = () => {
+    Alert.alert('Bio', 'Tap Edit Profile on web to update your bio.')
+  }
+
+  const handleEditSchedule = () => {
+    Alert.alert('Schedule', 'Scheduling editor coming soon.')
+  }
+
+  const handleViewBadges = () => {
+    Alert.alert('Badges', 'Full badge collection coming soon!')
+  }
+
+  const handleViewReviews = () => {
+    Alert.alert('Reviews', 'Reviews hub is on the roadmap.')
+  }
+
+  const handleViewStats = () => {
+    Alert.alert('Stats Dashboard', 'Detailed analytics will be available soon.')
+  }
+
+  const handleCopyLink = () => {
+    Alert.alert('Copied', 'Profile link copied to clipboard.')
+  }
+
+  const handleInviteFriends = () => {
+    Alert.alert('Invite Friends', 'Share your referral link to earn rewards!')
+  }
+
+  const handleQuickAction = (action: () => void) => {
+    action()
+  }
+
+  const handleChangeStatus = () => {
+    const order: AvailabilityStatus[] = ['available', 'busy', 'offline']
+    const currentIndex = order.indexOf(availabilityStatus)
+    const nextStatus = order[(currentIndex + 1) % order.length]
+    setAvailabilityStatus(nextStatus)
+    Alert.alert('Status updated', `You are now ${nextStatus}.`)
+  }
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Log Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const supabase = createClient()
-              const { error } = await supabase.auth.signOut()
-              if (error) {
-                console.error('Logout error:', error)
-                Alert.alert('Error', 'Failed to log out. Please try again.')
-              } else {
-                // Navigation will be handled by auth state listener in App.tsx
-                console.log('Logged out successfully')
-              }
-            } catch (error) {
-              console.error('Logout error:', error)
+    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const supabase = createClient()
+            const { error: signOutError } = await supabase.auth.signOut()
+            if (signOutError) {
+              console.error('[ProfileScreen] logout error', signOutError)
               Alert.alert('Error', 'Failed to log out. Please try again.')
             }
-          },
+          } catch (err) {
+            console.error('[ProfileScreen] logout error', err)
+            Alert.alert('Error', 'Failed to log out. Please try again.')
+          }
         },
-      ]
-    )
+      },
+    ])
   }
 
   if (isLoading) {
@@ -234,7 +507,7 @@ export default function ProfileScreen() {
         colors={[Colors.background.gradientStart, Colors.background.gradientMiddle, Colors.background.gradientEnd]}
         style={styles.container}
       >
-        <SafeAreaView style={styles.loadingContainer} edges={['top']}>
+        <SafeAreaView style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.accent.primary} />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </SafeAreaView>
@@ -242,389 +515,298 @@ export default function ProfileScreen() {
     )
   }
 
+  if (error) {
   return (
     <LinearGradient
       colors={[Colors.background.gradientStart, Colors.background.gradientMiddle, Colors.background.gradientEnd]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
       style={styles.container}
     >
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        {/* Back Button Header */}
-        <View style={styles.backButtonContainer}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.navigate('Map' as never)}
-            activeOpacity={0.7}
-          >
-            <ArrowLeft size={24} color={Colors.text.primary} />
-          </TouchableOpacity>
-        </View>
-        
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {/* Floating Particles Background */}
-          <View style={styles.particlesContainer}>
-            {[...Array(15)].map((_, i) => (
-              <FloatingParticle key={i} delay={i * 200} size={Math.random() * 4 + 2} />
-            ))}
-          </View>
+        <SafeAreaView style={styles.loadingContainer}>
+          <Text style={styles.errorTitle}>We hit a snag</Text>
+          <Text style={styles.errorSubtitle}>Unable to load your profile right now. Please try again shortly.</Text>
+        </SafeAreaView>
+      </LinearGradient>
+    )
+  }
 
-          {/* Profile Header - Modern Design with Animations */}
-          <Animated.View entering={FadeInDown.duration(500)} style={styles.profileSection}>
-            <View style={styles.avatarWrapper}>
-              {/* Animated rings around avatar */}
-              <Animated.View style={[styles.avatarRing1, avatarAnimatedStyle]} />
-              <Animated.View style={[styles.avatarRing2, avatarAnimatedStyle]} />
-              <Animated.View style={[styles.avatarContainer, avatarAnimatedStyle]}>
+  const xpPercent = Math.min(100, Math.round((XP_TRACK.current / XP_TRACK.target) * 100))
+
+  return (
                 <LinearGradient
-                  colors={['#3b82f6', '#8b5cf6', '#ec4899']}
+      colors={[Colors.background.gradientStart, Colors.background.gradientMiddle, Colors.background.gradientEnd]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={styles.avatarLarge}
-                >
-                  <Text style={styles.avatarLargeText}>{user?.full_name?.[0] || 'U'}</Text>
-                </LinearGradient>
-                {/* Online indicator */}
-                <View style={styles.onlineIndicatorLarge} />
-                {/* Crown badge for high level */}
-                <View style={styles.crownBadge}>
-                  <Crown size={16} color={Colors.accent.warning} fill={Colors.accent.warning} />
+      style={styles.container}
+    >
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.headerButton} onPress={handleBack} activeOpacity={0.8}>
+            <ArrowLeft color={Colors.text.primary} size={22} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>PROFILE</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.headerButton} onPress={handleShareProfile} activeOpacity={0.8}>
+              <Share2 color={Colors.text.primary} size={22} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerButton} onPress={handleOpenStore} activeOpacity={0.8}>
+              <ShoppingBag color={Colors.text.primary} size={22} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerButton} onPress={handleOpenSettings} activeOpacity={0.8}>
+              <Settings color={Colors.text.primary} size={22} />
+            </TouchableOpacity>
                 </View>
-              </Animated.View>
             </View>
             
-            <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-              <Text style={styles.profileName}>{user?.full_name || 'User'}</Text>
-              {user?.city && (
-                <View style={styles.locationRow}>
-                  <MapPin size={16} color={Colors.accent.primary} />
-                  <Text style={styles.locationText}>{user.city}</Text>
+        <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+          <View style={styles.profileCard}>
+            <View style={styles.avatarWrapper}>
+              {photoUri ? (
+                <Image source={{ uri: photoUri }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarFallbackText}>{profileName[0]}</Text>
                 </View>
               )}
-            </Animated.View>
-            
-            {user?.bio && (
-              <Animated.View entering={FadeInDown.delay(200).duration(400)} style={styles.bioContainer}>
-                <Text style={styles.bioText}>{user.bio}</Text>
-              </Animated.View>
-            )}
-          </Animated.View>
-
-          {/* Stats Cards - Modern Animated Design */}
-          <View style={styles.statsContainer}>
-            <AnimatedStatCard delay={300}>
-              <LinearGradient
-                colors={['#3b82f6', '#8b5cf6', '#ec4899']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.statCardGradient}
-              >
-                <View style={styles.statIconContainer}>
-                  <Trophy size={32} color={Colors.text.primary} />
-                </View>
-                <Text style={styles.statValueLarge}>Level 17</Text>
-                <Text style={styles.statLabelLarge}>Language Master</Text>
-                <View style={styles.progressBar}>
-                  <Animated.View 
-                    entering={SlideInRight.delay(500).duration(800)}
-                    style={[styles.progressFill, { width: '67%' }]} 
-                  />
-                </View>
-                <Text style={styles.progressText}>2,340 / 3,500 XP to Level 18</Text>
-              </LinearGradient>
-            </AnimatedStatCard>
-
-            <AnimatedStatCard delay={400}>
-              <LinearGradient
-                colors={['#f59e0b', '#ef4444', '#ec4899']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.statCardGradient}
-              >
-                <Animated.View 
-                  style={[
-                    styles.flameContainer,
-                    { transform: [{ scale: pulseScale }] }
-                  ]}
-                >
-                  <Flame size={48} color={Colors.text.primary} fill={Colors.accent.warning} />
-                </Animated.View>
-                <Text style={styles.statValueLarge}>24</Text>
-                <Text style={styles.statLabelLarge}>Day Streak</Text>
-                <View style={styles.streakSparkles}>
-                  <Sparkles size={16} color={Colors.accent.warning} />
-                  <Text style={styles.streakText}>Keep it going!</Text>
-                </View>
-              </LinearGradient>
-            </AnimatedStatCard>
+              <TouchableOpacity style={styles.cameraButton} onPress={handlePickImage} activeOpacity={0.8}>
+                <Camera size={18} color={Colors.text.primary} />
+              </TouchableOpacity>
+              <View style={[styles.statusBadge, isAvailable ? styles.statusBadgeAvailable : styles.statusBadgeBusy]}>
+                <Text style={styles.statusBadgeText}>
+                  {isAvailable ? '🟢 Available' : availabilityStatus === 'busy' ? '🟠 Busy' : '⚪ Offline'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.profileTextGroup}>
+              <Text style={styles.profileName}>{profileName}</Text>
+              <Text style={styles.profileEmail}>{profileEmail}</Text>
+              <View style={styles.profileMetaRow}>
+                <MapPin size={14} color={Colors.accent.primary} />
+                <Text style={styles.profileMetaText}>{profileLocation}</Text>
+              </View>
+              <View style={styles.profileMetaRow}>
+                <Calendar size={14} color={Colors.accent.primary} />
+                <Text style={styles.profileMetaText}>Joined {joinedDate}</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.primaryButton} onPress={handleEditProfile} activeOpacity={0.9}>
+              <Text style={styles.primaryButtonText}>✏️ EDIT PROFILE</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Quick Stats - Compact Design */}
-          <Animated.View entering={FadeInUp.delay(500).duration(400)} style={styles.quickStats}>
-            <Animated.View entering={SlideInRight.delay(600).duration(300)} style={styles.quickStatCard}>
-              <LinearGradient
-                colors={['rgba(251, 191, 36, 0.2)', 'rgba(251, 191, 36, 0.1)']}
-                style={styles.quickStatCardGradient}
-              >
-                <Star size={24} color={Colors.accent.warning} fill={Colors.accent.warning} />
-                <Text style={styles.quickStatValue}>4.8</Text>
-                <Text style={styles.quickStatLabel}>Rating</Text>
-              </LinearGradient>
-            </Animated.View>
-            <Animated.View entering={SlideInRight.delay(700).duration(300)} style={styles.quickStatCard}>
-              <LinearGradient
-                colors={['rgba(139, 92, 246, 0.2)', 'rgba(139, 92, 246, 0.1)']}
-                style={styles.quickStatCardGradient}
-              >
-                <Trophy size={24} color={Colors.accent.secondary} fill={Colors.accent.secondary} />
-                <Text style={styles.quickStatValue}>12</Text>
-                <Text style={styles.quickStatLabel}>Achievements</Text>
-              </LinearGradient>
-            </Animated.View>
-            <Animated.View entering={SlideInRight.delay(800).duration(300)} style={styles.quickStatCard}>
-              <LinearGradient
-                colors={['rgba(34, 197, 94, 0.2)', 'rgba(34, 197, 94, 0.1)']}
-                style={styles.quickStatCardGradient}
-              >
-                <Target size={24} color={Colors.accent.success} fill={Colors.accent.success} />
-                <Text style={styles.quickStatValue}>45</Text>
-                <Text style={styles.quickStatLabel}>Sessions</Text>
-              </LinearGradient>
-            </Animated.View>
-          </Animated.View>
-
-          {/* Languages - Animated Cards */}
-          <Animated.View entering={FadeInUp.delay(900).duration(400)} style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <MessageCircle size={20} color={Colors.accent.success} />
-              <Text style={styles.sectionTitle}>Languages I Speak</Text>
-            </View>
-            <View style={styles.languagesContainer}>
-              {user?.languages_speak?.map((lang, idx) => {
-                const scale = useSharedValue(1)
-                const animatedStyle = useAnimatedStyle(() => ({
-                  transform: [{ scale: scale.value }],
-                }))
-                
-                return (
-                  <Animated.View
-                    key={idx}
-                    entering={SlideInRight.delay(1000 + idx * 100).duration(300)}
-                    style={styles.languageCard}
-                  >
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPressIn={() => {
-                        scale.value = withSpring(0.95)
-                      }}
-                      onPressOut={() => {
-                        scale.value = withSpring(1)
-                      }}
-                      onPress={() => handleLanguageClick(lang)}
-                    >
-                      <Animated.View style={animatedStyle}>
-                        <LinearGradient
-                          colors={['rgba(34, 197, 94, 0.3)', 'rgba(34, 197, 94, 0.1)']}
-                          style={styles.languageBadge}
-                        >
-                          <Animated.View entering={ZoomIn.delay(200).duration(400)}>
-                            <Text style={styles.languageEmoji}>{getLanguageFlag(lang)}</Text>
-                          </Animated.View>
-                          <Text style={styles.languageText}>{lang}</Text>
-                          <View style={styles.languageBadgeTag}>
-                            <Text style={styles.languageBadgeTagText}>CAN TEACH</Text>
-                          </View>
-                        </LinearGradient>
-                      </Animated.View>
-                    </TouchableOpacity>
-                  </Animated.View>
-                )
-              }) || (
-                <Text style={styles.emptyText}>No languages added</Text>
-              )}
-            </View>
-          </Animated.View>
-
-          <Animated.View entering={FadeInUp.delay(1200).duration(400)} style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Sparkles size={20} color={Colors.accent.primary} />
-              <Text style={styles.sectionTitle}>Languages I'm Learning</Text>
-            </View>
-            <View style={styles.languagesContainer}>
-              {user?.languages_learn?.map((lang, idx) => {
-                const scale = useSharedValue(1)
-                const animatedStyle = useAnimatedStyle(() => ({
-                  transform: [{ scale: scale.value }],
-                }))
-                
-                return (
-                  <Animated.View
-                    key={idx}
-                    entering={SlideInRight.delay(1300 + idx * 100).duration(300)}
-                    style={styles.languageCard}
-                  >
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPressIn={() => {
-                        scale.value = withSpring(0.95)
-                      }}
-                      onPressOut={() => {
-                        scale.value = withSpring(1)
-                      }}
-                      onPress={() => handleLanguageClick(lang)}
-                    >
-                      <Animated.View style={animatedStyle}>
-                        <LinearGradient
-                          colors={['rgba(59, 130, 246, 0.3)', 'rgba(59, 130, 246, 0.1)']}
-                          style={[styles.languageBadge, styles.languageBadgeLearning]}
-                        >
-                          <Animated.View entering={ZoomIn.delay(200).duration(400)}>
-                            <Text style={styles.languageEmoji}>{getLanguageFlag(lang)}</Text>
-                          </Animated.View>
-                          <Text style={styles.languageText}>{lang}</Text>
-                          <View style={[styles.languageBadgeTag, styles.languageBadgeTagLearning]}>
-                            <Text style={[styles.languageBadgeTagText, styles.languageBadgeTagTextLearning]}>LEARNING</Text>
-                          </View>
-                        </LinearGradient>
-                      </Animated.View>
-                    </TouchableOpacity>
-                  </Animated.View>
-                )
-              }) || (
-                <Text style={styles.emptyText}>No languages added</Text>
-              )}
-            </View>
-          </Animated.View>
-
-          {/* Menu Items - Animated with Icons */}
-          <Animated.View entering={FadeInUp.delay(1500).duration(400)} style={styles.menuSection}>
-            {[
-              { icon: Edit3, label: 'Edit Profile', color: Colors.accent.primary, delay: 1600 },
-              { icon: Target, label: 'Progress', color: Colors.accent.success, delay: 1700 },
-              { icon: Trophy, label: 'Challenges', color: Colors.accent.secondary, delay: 1800 },
-              { icon: Settings, label: 'Settings', color: Colors.text.secondary, delay: 1900 },
-            ].map((item, idx) => (
-              <Animated.View
-                key={idx}
-                entering={SlideInRight.delay(item.delay).duration(300)}
-              >
-                <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-                  <View style={styles.menuItemLeft}>
-                    <View style={[styles.menuItemIconContainer, { backgroundColor: `${item.color}20` }]}>
-                      <item.icon size={20} color={item.color} />
-                    </View>
-                    <Text style={styles.menuItemText}>{item.label}</Text>
-                  </View>
-                  <ChevronRight size={20} color={Colors.text.tertiary} />
-                </TouchableOpacity>
-              </Animated.View>
-            ))}
-          </Animated.View>
-
-          {/* Logout Button */}
-          <Animated.View entering={FadeInUp.delay(2000).duration(400)}>
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.7}>
-              <LogOut size={20} color={Colors.accent.error} />
-              <Text style={styles.logoutText}>Log Out</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </ScrollView>
-      </SafeAreaView>
-
-      {/* Language Details Modal */}
-      <Modal
-        visible={languageModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setLanguageModalVisible(false)}
-      >
-        <SafeAreaView style={styles.modalOverlay}>
-          <TouchableOpacity 
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={() => setLanguageModalVisible(false)}
+          <SectionCard
+            title="PROGRESS & LEVEL"
+            icon={<Crown size={18} color={Colors.accent.primary} />}
           >
-            <Animated.View 
-              entering={ZoomIn.springify().damping(20).stiffness(300)}
-              style={styles.modalContent}
-              onStartShouldSetResponder={() => true}
-            >
-              <View style={styles.modalHeader}>
-                <TouchableOpacity 
-                  style={styles.modalCloseButton}
-                  onPress={() => setLanguageModalVisible(false)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <X size={24} color={Colors.text.primary} />
-                </TouchableOpacity>
-              </View>
-              
-              <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-                <Text style={styles.modalTitle}>{selectedLanguage}</Text>
-                <View style={styles.modalFlagContainer}>
-                  <Text style={styles.modalFlag}>{getLanguageFlag(selectedLanguage || '')}</Text>
+            <View style={styles.levelCard}>
+              <View style={styles.levelHeader}>
+                <View style={styles.levelIcon}>
+                  <Star size={20} color={Colors.text.primary} />
                 </View>
-              </Animated.View>
+                <View>
+                  <Text style={styles.levelTitle}>
+                    LEVEL {XP_TRACK.level} - {XP_TRACK.title}
+                  </Text>
+                  <Text style={styles.levelXP}>
+                    {XP_TRACK.current}/{XP_TRACK.target} XP
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.levelProgressBar}>
+                <View style={[styles.levelProgressFill, { width: `${xpPercent}%` }]} />
+              </View>
+              <Text style={styles.levelNextText}>
+                {XP_TRACK.target - XP_TRACK.current} XP until Level {XP_TRACK.level + 1}!
+              </Text>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => Alert.alert('Level Perks', 'Perks coming soon!')}>
+                <Text style={styles.secondaryButtonText}>→ View Level Perks</Text>
+              </TouchableOpacity>
+            </View>
+          </SectionCard>
 
-            {userLocation && nearbyUsers.length > 0 ? (
-              <Animated.View entering={FadeInUp.delay(200).duration(400)} style={styles.modalUsersList}>
-                <Text style={styles.modalSubtitle}>
-                  {nearbyUsers.length} {nearbyUsers.length === 1 ? 'person' : 'people'} nearby speak {selectedLanguage}
-                </Text>
-                <ScrollView style={styles.usersScrollView}>
-                  {nearbyUsers.map((nearbyUser, idx) => {
-                    const distance = userLocation 
-                      ? calculateDistance(
-                          userLocation.latitude,
-                          userLocation.longitude,
-                          nearbyUser.latitude || 0,
-                          nearbyUser.longitude || 0
-                        )
-                      : 0
-                    
-                    return (
-                      <Animated.View
-                        key={nearbyUser.id}
-                        entering={SlideInRight.delay(300 + idx * 100).duration(300)}
-                        style={styles.modalUserCard}
-                      >
-                        <View style={styles.modalUserInfo}>
-                          <View style={styles.modalUserAvatar}>
-                            <Text style={styles.modalUserAvatarText}>
-                              {nearbyUser.full_name?.[0] || 'U'}
-                            </Text>
+          <SectionCard title="📊 YOUR STATS">
+            <View style={styles.statsGrid}>
+              <StatCard value={`${DEFAULT_STATS.trades}`} label="Trades" />
+              <StatCard value={`🔥${DEFAULT_STATS.streak}`} label="Streak" />
+              <StatCard value={`${DEFAULT_STATS.rating.toFixed(1)}⭐`} label="Rating" />
+                </View>
+            <View style={styles.statsGrid}>
+              <StatCard value={`⏱${DEFAULT_STATS.hours}`} label="Hours" />
+              <StatCard value={`🏆${DEFAULT_STATS.badges}`} label="Badges" />
+              <StatCard value={`👥${DEFAULT_STATS.friends}`} label="Friends" />
+          </View>
+          </SectionCard>
+
+          <SectionCard title="🗣️ LANGUAGES YOU SPEAK">
+            {languageNative.map((lang) => (
+              <LanguageCard key={`native-${lang.code}`} item={lang} />
+            ))}
+            <SectionDivider />
+            {languageLearning.map((lang) => (
+              <LanguageCard key={`learning-${lang.code}`} item={lang} />
+            ))}
+            <TouchableOpacity style={styles.actionLinkButton} onPress={handleEditLanguages}>
+              <Text style={styles.actionLinkText}>➕ Add Another Language</Text>
+            </TouchableOpacity>
+          </SectionCard>
+
+          <SectionCard title="👋 ABOUT ME">
+            <View style={styles.aboutCard}>
+              <Text style={styles.aboutText}>
+                "{user?.bio || 'Love tech, coffee, and meeting new people! Looking to improve my Dutch for work. Happy to help with English pronunciation! 😊'}"
+              </Text>
+              <TouchableOpacity style={styles.inlineEditButton} onPress={handleEditBio}>
+                <Text style={styles.inlineEditText}>✏️ Edit Bio</Text>
+              </TouchableOpacity>
+            </View>
+          </SectionCard>
+
+          <SectionCard title="🎯 LEARNING GOALS">
+            {DEFAULT_GOALS.map((goal) => (
+              <View key={goal.id} style={styles.goalItem}>
+                <Text style={styles.goalCheckbox}>{goal.completed ? '☑️' : '☐'}</Text>
+                <Text style={[styles.goalText, goal.completed && styles.goalTextCompleted]}>{goal.text}</Text>
                           </View>
-                          <View style={styles.modalUserDetails}>
-                            <Text style={styles.modalUserName}>{nearbyUser.full_name || 'User'}</Text>
-                            <View style={styles.modalUserLocation}>
-                              <MapPin size={14} color={Colors.text.tertiary} />
-                              <Text style={styles.modalUserLocationText}>{nearbyUser.city || 'Unknown'}</Text>
+            ))}
+            <TouchableOpacity style={styles.actionLinkButton} onPress={() => Alert.alert('New Goal', 'Goal editor coming soon.')}>
+              <Text style={styles.actionLinkText}>➕ Add New Goal</Text>
+                    </TouchableOpacity>
+          </SectionCard>
+
+          <SectionCard title="⏰ AVAILABILITY">
+            <Text style={styles.subsectionLabel}>Current Status:</Text>
+            <View style={styles.statusCard}>
+              <Text style={styles.statusCardTitle}>
+                {availabilityStatus === 'available' ? '🟢 Available for practice' : availabilityStatus === 'busy' ? '🟠 Currently busy' : '⚪ Taking a break'}
+              </Text>
+              <Text style={styles.statusCardSubtitle}>{AVAILABILITY_PRESETS.nextWindow}</Text>
+              <TouchableOpacity style={styles.changeStatusButton} onPress={handleChangeStatus}>
+                <Text style={styles.changeStatusText}>Change Status ▼</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.subsectionLabel}>Typical Schedule:</Text>
+            <View style={styles.scheduleGrid}>
+              <View style={styles.scheduleCard}>
+                <Text style={styles.scheduleValue}>{AVAILABILITY_PRESETS.idealSession}</Text>
+                <Text style={styles.scheduleLabel}>Ideal Session</Text>
+                          </View>
+              <View style={styles.scheduleCard}>
+                <Text style={styles.scheduleValue}>{AVAILABILITY_PRESETS.bestTime}</Text>
+                <Text style={styles.scheduleLabel}>Best Time</Text>
+            </View>
+              <View style={styles.scheduleCard}>
+                <Text style={styles.scheduleValue}>{AVAILABILITY_PRESETS.preferredSpot}</Text>
+                <Text style={styles.scheduleLabel}>Preferred Spot</Text>
+                    </View>
+                  </View>
+            <TouchableOpacity style={styles.inlineEditButton} onPress={handleEditSchedule}>
+              <Text style={styles.inlineEditText}>✏️ Edit Schedule</Text>
+                </TouchableOpacity>
+            <Text style={[styles.subsectionLabel, styles.subsectionLabelSpacing]}>📍 Preferred Practice Locations:</Text>
+            {AVAILABILITY_PRESETS.locations.map((location) => (
+              <Text key={location} style={styles.locationText}>• {location}</Text>
+            ))}
+          </SectionCard>
+
+          <SectionCard title="🏆 ACHIEVEMENTS & BADGES">
+            <View style={styles.badgeGrid}>
+              {DEFAULT_BADGES.map((badge) => (
+                <BadgeCard key={badge.id} badge={badge} />
+              ))}
+            </View>
+            <TouchableOpacity style={styles.actionLinkButton} onPress={handleViewBadges}>
+              <Text style={styles.actionLinkText}>View All {DEFAULT_STATS.badges} Badges →</Text>
+            </TouchableOpacity>
+          </SectionCard>
+
+          <SectionCard title="⭐ REVIEWS RECEIVED">
+            {DEFAULT_REVIEWS.map((review) => (
+              <ReviewCard key={review.id} review={review} />
+            ))}
+            <TouchableOpacity style={styles.actionLinkButton} onPress={handleViewReviews}>
+              <Text style={styles.actionLinkText}>View All 47 Reviews →</Text>
+                </TouchableOpacity>
+          </SectionCard>
+
+          <SectionCard title="🌟 HIGHLIGHTS">
+            {DEFAULT_HIGHLIGHTS.map((highlight) => (
+              <HighlightCard key={highlight.id} highlight={highlight} />
+            ))}
+          </SectionCard>
+
+          <SectionCard title="🎯 DAILY CHALLENGES">
+            <Text style={styles.challengesTitle}>TODAY'S CHALLENGES</Text>
+            {DEFAULT_CHALLENGES.map((challenge) => (
+              <ChallengeCard key={challenge.id} challenge={challenge} />
+            ))}
+            <Text style={styles.challengesReset}>Resets in: 8h 23m</Text>
+            <TouchableOpacity style={styles.actionLinkButton} onPress={() => Alert.alert('Challenges', 'More challenges coming soon!')}>
+              <Text style={styles.actionLinkText}>Explore More Challenges →</Text>
+            </TouchableOpacity>
+          </SectionCard>
+
+          <SectionCard title="🔗 QUICK ACTIONS">
+            <View style={styles.quickActionsGrid}>
+              <QuickActionButton icon={<Share2 size={20} color={Colors.text.primary} />} label="Share Profile" onPress={handleShareProfile} />
+              <QuickActionButton icon={<QrCode size={20} color={Colors.text.primary} />} label="QR Code" onPress={() => handleQuickAction(() => Alert.alert('QR Code', 'QR code generator coming soon.'))} />
+              <QuickActionButton icon={<LinkIcon size={20} color={Colors.text.primary} />} label="Copy Link" onPress={() => handleQuickAction(handleCopyLink)} />
+                          </View>
+            <View style={styles.quickActionsGrid}>
+              <QuickActionButton icon={<BarChart3 size={20} color={Colors.text.primary} />} label="Stats Dashboard" onPress={handleViewStats} />
+              <QuickActionButton icon={<Award size={20} color={Colors.text.primary} />} label="Badges Collection" onPress={handleViewBadges} />
+              <QuickActionButton icon={<Settings size={20} color={Colors.text.primary} />} label="Settings" onPress={handleOpenSettings} />
                             </View>
+          </SectionCard>
+
+          <SectionCard title="🎁 REFERRAL PROGRAM">
+            <View style={styles.referralCard}>
+              <Text style={styles.referralTitle}>Invite Friends, Earn Rewards!</Text>
+              <Text style={styles.referralText}>You: 100 XP per friend</Text>
+              <Text style={styles.referralText}>Friend: 50 XP bonus</Text>
+              <TouchableOpacity style={styles.inviteButton} onPress={handleInviteFriends}>
+                <LinearGradient
+                  colors={['#00FF88', '#00D9FF']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.inviteGradient}
+                >
+                  <Text style={styles.inviteButtonText}>📨 Invite Friends</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              <Text style={styles.referralStats}>Invited: 3 • Joined: 2 • Earned: 200 XP</Text>
                           </View>
-                        </View>
-                        <View style={styles.modalDistanceBadge}>
-                          <Text style={styles.modalDistanceText}>{formatDistance(distance)}</Text>
-                        </View>
-                      </Animated.View>
-                    )
-                  })}
-                </ScrollView>
-              </Animated.View>
-            ) : (
-              <Animated.View entering={FadeInUp.delay(200).duration(400)} style={styles.modalEmptyState}>
-                <Text style={styles.modalEmptyText}>
-                  {userLocation 
-                    ? 'No nearby users found for this language'
-                    : 'Enable location to find nearby users'}
-                </Text>
-              </Animated.View>
-            )}
-            </Animated.View>
+          </SectionCard>
+
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+            <LogOut size={20} color={Colors.accent.error} />
+            <Text style={styles.logoutText}>Log Out</Text>
           </TouchableOpacity>
+
+          <View style={{ height: scale(48) }} />
+        </ScrollView>
         </SafeAreaView>
-      </Modal>
     </LinearGradient>
   )
+}
+
+function QuickActionButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: React.ReactNode
+  label: string
+  onPress: () => void
+}) {
+  return (
+    <TouchableOpacity style={styles.quickActionButton} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.quickActionIcon}>{icon}</View>
+      <Text style={styles.quickActionLabel}>{label}</Text>
+    </TouchableOpacity>
+  )
+}
+
+function SectionDivider() {
+  return <View style={styles.sectionDivider} />
 }
 
 const styles = StyleSheet.create({
@@ -639,21 +821,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,
+    paddingHorizontal: 24,
   },
   loadingText: {
     fontSize: 16,
     color: Colors.text.secondary,
   },
-  scrollView: {
-    flex: 1,
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  backButtonContainer: {
-    paddingHorizontal: scale(16),
+  errorSubtitle: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: scale(20),
     paddingTop: scale(8),
-    paddingBottom: scale(8),
-    zIndex: 10,
+    paddingBottom: scale(12),
   },
-  backButton: {
+  headerButton: {
     width: scale(40),
     height: scale(40),
     borderRadius: scale(20),
@@ -662,472 +856,588 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.border.primary,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
   },
-  particlesContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 0,
-  },
-  profileSection: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 16,
-    zIndex: 1,
-  },
-  avatarWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  avatarContainer: {
-    position: 'relative',
-    zIndex: 3,
-  },
-  avatarRing1: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 2,
-    borderColor: 'rgba(59, 130, 246, 0.3)',
-    zIndex: 1,
-  },
-  avatarRing2: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 2,
-    borderColor: 'rgba(139, 92, 246, 0.2)',
-    zIndex: 0,
-  },
-  avatarLarge: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: Colors.text.primary,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  onlineIndicatorLarge: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Colors.accent.success,
-    borderWidth: 3,
-    borderColor: Colors.text.primary,
-    zIndex: 4,
-  },
-  crownBadge: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.text.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.accent.warning,
-    zIndex: 4,
-  },
-  bioContainer: {
-    marginTop: 12,
-    paddingHorizontal: 32,
-  },
-  avatarLargeText: {
-    fontSize: 40,
-    fontWeight: 'bold',
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 2,
     color: Colors.text.primary,
   },
-  profileName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 8,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 12,
-  },
-  locationText: {
-    fontSize: 14,
-    color: Colors.text.tertiary,
-  },
-  bioText: {
-    fontSize: 14,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-    paddingHorizontal: 32,
-    lineHeight: 20,
-  },
-  statsContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
-    gap: 16,
-  },
-  statCardGradient: {
-    borderRadius: 24,
-    padding: 32,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  statIconContainer: {
-    marginBottom: 12,
-  },
-  flameContainer: {
-    marginBottom: 12,
-  },
-  streakSparkles: {
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 8,
   },
-  streakText: {
-    fontSize: 12,
-    color: Colors.text.primary,
-    opacity: 0.9,
-    fontWeight: '600',
+  contentContainer: {
+    paddingHorizontal: scale(20),
+    paddingBottom: scale(16),
+    gap: scale(20),
   },
-  statValueLarge: {
-    fontSize: 56,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    marginBottom: 8,
-  },
-  statLabelLarge: {
-    fontSize: 18,
-    color: Colors.text.primary,
-    opacity: 0.9,
-    marginBottom: 16,
-  },
-  progressBar: {
-    width: '100%',
-    height: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: Colors.text.primary,
-    borderRadius: 6,
-  },
-  progressText: {
-    fontSize: 12,
-    color: Colors.text.primary,
-    opacity: 0.8,
-  },
-  quickStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 16,
-    marginBottom: 24,
-    gap: 12,
-  },
-  quickStatCard: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
+  profileCard: {
+    backgroundColor: Colors.surface.primary,
+    borderRadius: 28,
+    padding: scale(24),
     borderWidth: 1,
     borderColor: Colors.border.primary,
-  },
-  quickStatCardGradient: {
-    padding: 16,
     alignItems: 'center',
-    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 8,
   },
-  quickStatValue: {
-    fontSize: 20,
+  avatarWrapper: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: Colors.surface.glass,
+  },
+  avatarFallback: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: Colors.accent.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: Colors.border.primary,
+  },
+  avatarFallbackText: {
+    fontSize: 48,
     fontWeight: 'bold',
     color: Colors.text.primary,
-    marginTop: 8,
   },
-  quickStatLabel: {
-    fontSize: 12,
-    color: Colors.text.tertiary,
-    marginTop: 4,
+  cameraButton: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.accent.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.surface.primary,
   },
-  section: {
+  statusBadge: {
+    position: 'absolute',
+    left: '50%',
+    bottom: -14,
+    transform: [{ translateX: -60 }],
     paddingHorizontal: 16,
-    marginBottom: 24,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.surface.primary,
+  },
+  statusBadgeAvailable: {
+    backgroundColor: 'rgba(34, 197, 94, 0.18)',
+  },
+  statusBadgeBusy: {
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  profileTextGroup: {
+    marginTop: 24,
+    alignItems: 'center',
+    gap: 6,
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  profileEmail: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+  },
+  profileMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  profileMetaText: {
+    fontSize: 13,
+    color: Colors.text.tertiary,
+  },
+  primaryButton: {
+    marginTop: 20,
+    backgroundColor: Colors.accent.primary,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+  },
+  primaryButtonText: {
+    color: Colors.text.primary,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  sectionCard: {
+    backgroundColor: Colors.surface.primary,
+    borderRadius: 24,
+    padding: scale(20),
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    gap: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 18,
+  sectionHeaderText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    letterSpacing: 1,
+  },
+  levelCard: {
+    gap: 16,
+  },
+  levelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  levelIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.accent.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  levelTitle: {
+    fontSize: 16,
     fontWeight: '600',
     color: Colors.text.primary,
   },
-  languagesContainer: {
+  levelXP: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+    marginTop: 4,
+  },
+  levelProgressBar: {
+    height: 12,
+    backgroundColor: Colors.surface.glass,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  levelProgressFill: {
+    height: '100%',
+    backgroundColor: Colors.accent.primary,
+    borderRadius: 6,
+  },
+  levelNextText: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+  },
+  secondaryButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.accent.primary,
+  },
+  secondaryButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.accent.primary,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    alignItems: 'center',
+    backgroundColor: Colors.surface.glass,
+    gap: 6,
+  },
+  statCardValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  statCardLabel: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+    letterSpacing: 0.5,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: Colors.border.primary,
+    opacity: 0.2,
+  },
+  languageCard: {
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    borderRadius: 18,
+    padding: 16,
+    gap: 10,
+    backgroundColor: Colors.surface.glass,
+  },
+  languageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  languageFlag: {
+    fontSize: 28,
+  },
+  languageName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  languageLevel: {
+    fontSize: 12,
+    color: Colors.text.tertiary,
+    letterSpacing: 1,
+  },
+  languageProgressBar: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.surface.primary,
+    overflow: 'hidden',
+  },
+  languageProgressFill: {
+    height: '100%',
+    borderRadius: 5,
+    backgroundColor: Colors.accent.primary,
+  },
+  languageDescription: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    fontStyle: 'italic',
+  },
+  actionLinkButton: {
+    alignSelf: 'flex-start',
+  },
+  actionLinkText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.accent.primary,
+  },
+  aboutCard: {
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    borderRadius: 18,
+    padding: 18,
+    backgroundColor: Colors.surface.glass,
+    gap: 16,
+  },
+  aboutText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    lineHeight: 20,
+  },
+  inlineEditButton: {
+    alignSelf: 'flex-start',
+  },
+  inlineEditText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.accent.primary,
+  },
+  goalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  goalCheckbox: {
+    fontSize: 20,
+  },
+  goalText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+  },
+  goalTextCompleted: {
+    textDecorationLine: 'line-through',
+    color: Colors.text.tertiary,
+  },
+  subsectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  subsectionLabelSpacing: {
+    marginTop: 16,
+  },
+  statusCard: {
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    borderRadius: 18,
+    padding: 18,
+    gap: 8,
+    backgroundColor: Colors.surface.glass,
+  },
+  statusCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  statusCardSubtitle: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+  },
+  changeStatusButton: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  changeStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.accent.primary,
+  },
+  scheduleGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  scheduleCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    backgroundColor: Colors.surface.glass,
+    alignItems: 'center',
+    gap: 6,
+  },
+  scheduleValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  scheduleLabel: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+  },
+  locationText: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    marginTop: 4,
+  },
+  badgeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
   },
-  languageCard: {
-    flex: 1,
-    minWidth: '45%',
-    marginBottom: 8,
-  },
-  languageBadge: {
-    padding: 16,
-    borderRadius: 20,
+  badgeCard: {
+    width: '22%',
+    minWidth: 72,
+    aspectRatio: 1,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.border.primary,
+    backgroundColor: Colors.surface.glass,
+    justifyContent: 'center',
     alignItems: 'center',
+    gap: 4,
+    padding: 8,
+  },
+  badgeCardLocked: {
+    opacity: 0.4,
+  },
+  badgeIcon: {
+    fontSize: 24,
+  },
+  badgeName: {
+    fontSize: 11,
+    textAlign: 'center',
+    color: Colors.text.secondary,
+  },
+  reviewCard: {
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    borderRadius: 18,
+    padding: 18,
+    backgroundColor: Colors.surface.glass,
     gap: 8,
   },
-  languageBadgeLearning: {
-    // Different gradient for learning
-  },
-  languageEmoji: {
-    fontSize: 32,
-    marginBottom: 4,
-  },
-  languageText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    marginBottom: 8,
-  },
-  languageBadgeTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-  },
-  languageBadgeTagLearning: {
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-  },
-  languageBadgeTagText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.accent.success,
-    letterSpacing: 0.5,
-  },
-  languageBadgeTagTextLearning: {
-    color: Colors.accent.primary,
-  },
-  emptyText: {
+  reviewStars: {
     fontSize: 14,
+    color: Colors.accent.warning,
+  },
+  reviewText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    lineHeight: 20,
+  },
+  reviewAuthor: {
+    fontSize: 12,
     color: Colors.text.tertiary,
   },
-  menuSection: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.surface.glass,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.border.primary,
-  },
-  menuItemLeft: {
+  highlightCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: Colors.surface.glass,
   },
-  menuItemIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  highlightIcon: {
+    fontSize: 24,
+  },
+  highlightTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  highlightSubtitle: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+  },
+  challengesTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    letterSpacing: 1,
+  },
+  challengeCard: {
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    borderRadius: 18,
+    padding: 16,
+    gap: 10,
+    backgroundColor: Colors.surface.glass,
+  },
+  challengeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  challengeText: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+  },
+  challengeTextCompleted: {
+    color: Colors.accent.success,
+    fontWeight: '600',
+  },
+  challengeReward: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.accent.primary,
+  },
+  challengeProgressBar: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.surface.primary,
+    overflow: 'hidden',
+  },
+  challengeProgressFill: {
+    height: '100%',
+    backgroundColor: Colors.accent.primary,
+  },
+  challengeProgressFillCompleted: {
+    backgroundColor: Colors.accent.success,
+  },
+  challengesReset: {
+    fontSize: 12,
+    color: Colors.text.tertiary,
+  },
+  quickActionsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  quickActionButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    borderRadius: 18,
+    backgroundColor: Colors.surface.glass,
+    paddingVertical: 16,
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickActionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  menuItemText: {
+  quickActionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+    textAlign: 'center',
+  },
+  referralCard: {
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    borderRadius: 20,
+    padding: 20,
+    gap: 8,
+    backgroundColor: Colors.surface.glass,
+  },
+  referralTitle: {
     fontSize: 16,
+    fontWeight: '700',
     color: Colors.text.primary,
-    fontWeight: '500',
+  },
+  referralText: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+  },
+  inviteButton: {
+    marginTop: 10,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  inviteGradient: {
+    paddingVertical: 12,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  inviteButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#00110A',
+  },
+  referralStats: {
+    fontSize: 12,
+    color: Colors.text.tertiary,
+    marginTop: 8,
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surface.glass,
-    marginHorizontal: 16,
-    marginBottom: 32,
-    padding: 16,
-    borderRadius: 12,
+    gap: 8,
     borderWidth: 1,
     borderColor: Colors.accent.error,
-    gap: 8,
+    borderRadius: 18,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(248, 113, 113, 0.1)',
   },
   logoutText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: Colors.accent.error,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalBackdrop: {
-    flex: 1,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: Colors.surface.primary,
-    borderRadius: 24,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    maxHeight: '85%',
-    borderWidth: 1,
-    borderColor: Colors.border.primary,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 16,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginBottom: 8,
-  },
-  modalCloseButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.surface.glass,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border.primary,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  modalFlagContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalFlag: {
-    fontSize: 64,
-  },
-  modalSubtitle: {
-    fontSize: 16,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  modalUsersList: {
-    flex: 1,
-  },
-  usersScrollView: {
-    maxHeight: 300,
-  },
-  modalUserCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.surface.glass,
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border.primary,
-  },
-  modalUserInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  modalUserAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.accent.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalUserAvatarText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-  },
-  modalUserDetails: {
-    flex: 1,
-  },
-  modalUserName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    marginBottom: 4,
-  },
-  modalUserLocation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  modalUserLocationText: {
-    fontSize: 12,
-    color: Colors.text.tertiary,
-  },
-  modalDistanceBadge: {
-    backgroundColor: Colors.accent.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  modalDistanceText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text.primary,
-  },
-  modalEmptyState: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  modalEmptyText: {
-    fontSize: 16,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-  },
 })
+
+
