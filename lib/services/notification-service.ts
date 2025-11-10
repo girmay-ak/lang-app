@@ -21,6 +21,7 @@ export interface NotificationRow {
   is_read: boolean
   created_at: string
   reference_id?: string | null
+  type?: string
 }
 
 export type NotificationRecord = NotificationRow & {
@@ -176,9 +177,7 @@ export const notificationService = {
 
     const { data, error } = await supabase
       .from("notifications")
-      .select(
-        `id, user_id, notification_type, title, body, data, is_read, created_at, reference_id`,
-      )
+      .select(`id, user_id, notification_type, type, title, body, data, is_read, created_at, reference_id`)
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(limit)
@@ -190,7 +189,13 @@ export const notificationService = {
       )
     }
 
-    const hydrated = await hydrateNotifications((data as NotificationRow[]) ?? [])
+    const normalizedRows: NotificationRow[] =
+      (data as (NotificationRow & { type?: string })[] | null)?.map((row) => ({
+        ...row,
+        notification_type: row.notification_type ?? row.type ?? "system_announcements",
+      })) ?? []
+
+    const hydrated = await hydrateNotifications(normalizedRows)
     return { notifications: sortNotifications(hydrated), userId }
   },
 

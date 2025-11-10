@@ -468,9 +468,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
     return nearbyUsers.map((dbUser) => {
       const coordinates = resolveUserCoordinates(dbUser.id, dbUser.latitude, dbUser.longitude)
-      const primaryLanguageCode = dbUser.languages_speak?.[0] ?? dbUser.languages_learn?.[0] ?? "en"
-      const languageName = getLanguageName(primaryLanguageCode)
-      const flag = getLanguageFlag(primaryLanguageCode)
+      const primaryLanguageCode = dbUser.languages_speak?.[0] ?? dbUser.languages_learn?.[0] ?? ""
 
       const languageRows =
         ((dbUser as any).user_languages as
@@ -506,10 +504,11 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
             })
 
       if (detailedBadges.length === 0) {
+        const fallbackCode = primaryLanguageCode || "en"
         const gradient = resolveLevelGradient("native")
         detailedBadges.push({
-          language: languageName,
-          flag,
+          language: getLanguageName(fallbackCode),
+          flag: getLanguageFlag(fallbackCode),
           levelKey: "native",
           levelLabel: gradient.label,
         })
@@ -528,12 +527,21 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       const primaryBadge =
         detailedBadges.find((badge) => badge.levelKey === "native") ??
         detailedBadges.find((badge) => badge.levelKey === highestBadge.levelKey) ??
-        highestBadge
+        detailedBadges[0]
 
       const secondaryBadge =
         detailedBadges.find(
           (badge) => badge !== primaryBadge && badge.language.toLowerCase() !== primaryBadge?.language.toLowerCase(),
         ) ?? detailedBadges[1] ?? primaryBadge
+
+      const languageName = primaryBadge?.language ?? getLanguageName(primaryLanguageCode || "en")
+      const flag = primaryBadge?.flag ?? getLanguageFlag(primaryLanguageCode || "en")
+
+      const nativeBadge = detailedBadges.find((badge) => badge.levelKey === "native") ?? primaryBadge
+      const learningBadge = detailedBadges.find((badge) => badge.levelKey !== "native") ?? secondaryBadge
+
+      const secondaryLanguageName =
+        learningBadge && learningBadge !== nativeBadge ? learningBadge.language : secondaryBadge?.language
 
       const levelGradient = resolveLevelGradient(highestBadge?.levelKey)
 
@@ -554,10 +562,38 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
         availabilityEmoji,
         availabilityMessage,
         currentLocation: dbUser.city ?? "Nearby cafe",
-        secondaryLanguage: secondaryBadge?.language,
-        primaryLanguage: primaryBadge?.language ?? languageName,
+        secondaryLanguage: secondaryLanguageName,
+        primaryLanguage: languageName,
         timeLeftLabel,
       })
+
+      const languageSummary = secondaryLanguageName ? `${languageName} • ${secondaryLanguageName}` : languageName
+
+      const pairFlagSet = new Set<string>()
+      if (primaryBadge?.flag) {
+        pairFlagSet.add(primaryBadge.flag)
+      }
+      if (secondaryBadge?.flag && secondaryBadge.flag !== primaryBadge?.flag) {
+        pairFlagSet.add(secondaryBadge.flag)
+      }
+      if (viewerLearning?.flag && !pairFlagSet.has(viewerLearning.flag)) {
+        pairFlagSet.add(viewerLearning.flag)
+      }
+      if (pairFlagSet.size < 2 && viewerFallbackFlag && !pairFlagSet.has(viewerFallbackFlag)) {
+        pairFlagSet.add(viewerFallbackFlag)
+      }
+      const pairFlags = Array.from(pairFlagSet).slice(0, 2)
+
+      const pairLabelFlags = Array.from(
+        new Set(
+          [nativeBadge?.flag, learningBadge && learningBadge !== nativeBadge ? learningBadge.flag : undefined].filter(
+            Boolean,
+          ) as string[],
+        ),
+      )
+      const languagePairLabel = pairLabelFlags.length
+        ? `${pairLabelFlags.join(" ")} ${secondaryLanguageName ? `${languageName} ↔ ${secondaryLanguageName}` : languageName}`
+        : undefined
 
       const matchScore = computeMatchScore(
         detailedBadges.map((badge) => ({ language: badge.language, levelKey: badge.levelKey })),
@@ -633,17 +669,6 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
         locations: `☕ Preferred locations: ${currentLocationLabel}`,
       }
 
-      const pairFlags = Array.from(
-        new Set(
-          [
-            primaryBadge?.flag,
-            secondaryBadge?.flag,
-            viewerLearning?.flag,
-            viewerFallbackFlag,
-          ].filter(Boolean) as string[],
-        ),
-      ).slice(0, 2)
-
       return {
         id: dbUser.id,
         name: dbUser.full_name ?? "Language Explorer",
@@ -667,7 +692,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
           level: badge.levelLabel,
         })),
         primaryLanguage: primaryBadge?.language ?? languageName,
-        secondaryLanguage: secondaryBadge?.language,
+        secondaryLanguage: secondaryLanguageName,
         primaryFlag: primaryBadge?.flag ?? flag,
         secondaryFlag:
           secondaryBadge && secondaryBadge.flag !== primaryBadge?.flag ? secondaryBadge.flag : undefined,
@@ -680,7 +705,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
         availabilityMessage,
         availabilityEmoji,
         isViewer: false,
-        languagePairLabel: pairFlags.length ? `${pairFlags.join(" ")} Language Trader` : undefined,
+        languagePairLabel,
         compatibilityScore: matchScore,
         compatibilityBlurb: statusText,
         levelBadge: { title: levelGradient.label ?? "Language Explorer", tier: statusText ?? "Active partner" },
@@ -738,9 +763,9 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
   const effectiveUserLocation = useMemo(() => {
     return userLocation ?? {
-      lat: FALLBACK_CITY_CENTER.latitude,
-      lng: FALLBACK_CITY_CENTER.longitude,
-    }
+    lat: FALLBACK_CITY_CENTER.latitude,
+    lng: FALLBACK_CITY_CENTER.longitude,
+  }
   }, [userLocation])
   const nearbyCount = nearbyUsers.length
   const displayCity = currentCity ?? "Den Haag"
@@ -761,6 +786,8 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     return mapUsers.map((user) => {
       const primaryLanguageBadge = user.languagesSpoken.find((lang) => lang.language === user.primaryLanguage)
       const fallbackLanguage = user.languagesSpoken[0]
+      const secondaryLanguageBadge = user.languagesSpoken.find((lang) => lang.language !== user.primaryLanguage)
+      const secondaryLanguageLabel = secondaryLanguageBadge?.language ?? user.secondaryLanguage ?? null
       const languageName =
         user.primaryLanguage ?? primaryLanguageBadge?.language ?? fallbackLanguage?.language ?? user.language ?? "Language partner"
       const languageLevel =
@@ -774,6 +801,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
         user.bio ??
         "Language enthusiast ready to connect."
       const timeLeft = user.availableFor || user.timePreference || "Available soon"
+      const combinedLanguageLabel = secondaryLanguageLabel ? `${languageName} • ${secondaryLanguageLabel}` : languageName
 
       return {
         id: user.id,
@@ -781,7 +809,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
         displayName,
         distance: user.distance ?? "Nearby",
         timeLeft,
-        language: languageName,
+        language: combinedLanguageLabel,
         languageLevel,
         flag,
         status:
@@ -1106,7 +1134,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     setIsAvailabilityModalOpen(false)
       if (tempIsAvailable && !wasAvailable) {
         toast({
-          title: `${selectedEmoji} You’re now live`,
+          title: `${selectedEmoji} You're now live`,
           description:
             trimmedMessage.length > 0
               ? `${trimmedMessage} • Visible in ${displayCity} for ${tempAvailabilityDuration} minutes.`
@@ -1307,7 +1335,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       const firstName = name.split(" ")[0]
       toast({
         title: "Saved to Notes",
-        description: `We’ll keep a note slot ready for ${firstName} soon.`,
+        description: `We'll keep a note slot ready for ${firstName} soon.`,
       })
     },
     [selectedUser, toast],
@@ -1367,7 +1395,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
             <div className="flex items-start justify-between gap-6">
               <div>
                 <p className="text-xs uppercase tracking-[0.35em] text-white/40">Set Availability</p>
-                <h3 className="mt-2 text-2xl font-semibold">Let friends know you’re free</h3>
+                <h3 className="mt-2 text-2xl font-semibold">Let friends know you're free</h3>
                 <p className="mt-1 text-sm text-white/60">
                   Toggle your availability to show up for nearby learners in {displayCity}.
                 </p>
@@ -1389,7 +1417,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                     Available Now
                   </p>
                   <p className="mt-1 text-xs text-white/60">
-                    When enabled, other users can see you’re available for language exchange.
+                    When enabled, other users can see you're available for language exchange.
                   </p>
                 </div>
                 <motion.button
@@ -1620,7 +1648,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                     <p className="mt-1 text-sm text-emerald-50/90">
                       {tempAvailabilityMessage
                         ? tempAvailabilityMessage
-                        : "We’ll surface you to nearby explorers while you’re open."}
+                        : "We'll surface you to nearby explorers while you're open."}
                     </p>
                   </motion.div>
                 </motion.div>

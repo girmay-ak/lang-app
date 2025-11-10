@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { ArrowLeft, ArrowRight, Heart, MapPin, MessageCircle, Zap } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { ArrowLeft, ArrowRight, Heart, MapPin, Zap } from "lucide-react"
 import { useSwipeable } from "react-swipeable"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -353,6 +353,8 @@ export function ProfileCard({
   isInvitePending = false,
 }: ProfileCardProps) {
   const { toast } = useToast()
+  const modalRef = useRef<HTMLDivElement | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const [currentIndex, setCurrentIndex] = useState(() => {
     if (profiles.length === 0) return 0
     return Math.min(Math.max(initialIndex, 0), profiles.length - 1)
@@ -367,6 +369,49 @@ export function ProfileCard({
     () => new Set(favoriteIds ?? []),
   )
   const [justLiked, setJustLiked] = useState(false)
+  useEffect(() => {
+    const modal = modalRef.current
+    const scrollContainer = scrollContainerRef.current
+    if (!modal || !scrollContainer) return
+
+    const focusTarget = scrollContainer
+    const raf = requestAnimationFrame(() => {
+      modal.focus({ preventScroll: true })
+      focusTarget.focus({ preventScroll: true })
+    })
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!scrollContainer.contains(document.activeElement)) return
+
+      const step = event.key === "PageDown" || event.key === "PageUp" ? 240 : 80
+      if (event.key === "ArrowDown") {
+        event.preventDefault()
+        scrollContainer.scrollBy({ top: step, behavior: "smooth" })
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault()
+        scrollContainer.scrollBy({ top: -step, behavior: "smooth" })
+      } else if (event.key === "PageDown") {
+        event.preventDefault()
+        scrollContainer.scrollBy({ top: step * 2, behavior: "smooth" })
+      } else if (event.key === "PageUp") {
+        event.preventDefault()
+        scrollContainer.scrollBy({ top: -step * 2, behavior: "smooth" })
+      } else if (event.key === "Home") {
+        event.preventDefault()
+        scrollContainer.scrollTo({ top: 0, behavior: "smooth" })
+      } else if (event.key === "End") {
+        event.preventDefault()
+        scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: "smooth" })
+      }
+    }
+
+    modal.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      modal.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [currentIndex, profiles.length])
 
   useEffect(() => {
     injectProfileStyles()
@@ -429,13 +474,13 @@ export function ProfileCard({
     setIsAnimating(true)
     setCurrentIndex((prev) => Math.max(prev - 1, 0))
     window.setTimeout(() => setIsAnimating(false), 320)
-  }
+      }
 
   const handleNext = () => {
     if (isAnimating || profiles.length === 0) return
     if (activeIndex === profiles.length - 1) {
       if (loopNavigation && profiles.length > 1) {
-        setIsAnimating(true)
+      setIsAnimating(true)
         setCurrentIndex(0)
         window.setTimeout(() => setIsAnimating(false), 320)
       } else {
@@ -487,15 +532,15 @@ export function ProfileCard({
     if (onFavoriteChange) {
       Promise.resolve(onFavoriteChange(activeProfile, willBeFavorited)).catch((error) => {
         console.error("[ProfileCard] Failed to update favorites:", error)
-        setFavorites((prev) => {
-          const next = new Set(prev)
+    setFavorites((prev) => {
+      const next = new Set(prev)
           if (willBeFavorited) {
-            next.delete(activeProfile.id)
-          } else {
-            next.add(activeProfile.id)
-          }
-          return next
-        })
+        next.delete(activeProfile.id)
+      } else {
+        next.add(activeProfile.id)
+      }
+      return next
+    })
         setJustLiked(false)
         toast({
           title: "Favorite update failed",
@@ -657,10 +702,15 @@ export function ProfileCard({
       }
     },
     onSwiping: (event) => {
+      const targetNode = (event.event?.target as Node | null) ?? null
+      if (targetNode && scrollContainerRef.current?.contains(targetNode)) {
+        return
+      }
+
       if (event.dir === "Down" && event.deltaY > 0) {
         const offset = Math.min(300, event.deltaY * 0.5)
         setVerticalOffset(offset)
-      } else {
+      } else if (event.dir === "Left" || event.dir === "Right") {
         const maxOffset = 100
         const offset = Math.max(-maxOffset, Math.min(maxOffset, event.deltaX * 0.3))
         setSwipeOffset(offset)
@@ -670,7 +720,7 @@ export function ProfileCard({
       }
     },
     trackMouse: true,
-    preventScrollOnSwipe: true,
+    preventScrollOnSwipe: false,
   })
 
   useEffect(() => {
@@ -753,9 +803,40 @@ export function ProfileCard({
     `${activeProfile.flag} ${activeProfile.languageLevel ?? "Language"} Partner`
   const isOnline = activeProfile.isOnline ?? true
 
-  const cardBase = "rounded-2xl border border-white/10 bg-gray-900/70 backdrop-blur-md shadow-lg transition-transform duration-200 ease-in-out hover:scale-[1.02] p-4 sm:p-6 md:p-8"
-  const sectionTitle = "text-sm sm:text-base md:text-lg font-semibold uppercase tracking-[0.3em] text-white/55"
-  const bodyText = "text-sm sm:text-base md:text-lg text-white/65"
+  const ratingStat = stats.find((stat) => stat.label.toLowerCase() === "rating")
+  const ratingValue = ratingStat?.value ?? ""
+  const reviewCountLabel =
+    (activeProfile as any)?.reviewCount ?? (activeProfile.reviews ? activeProfile.reviews.length : undefined)
+  const distanceLabel = activeProfile.distance ?? "Nearby"
+  const timeToMeetLabel = activeProfile.timeLeft || "Available now"
+  const rawLocation =
+    activeProfile.location ??
+    (availabilityInfo.locations
+      ? availabilityInfo.locations.replace(/^[^:]+:\s*/i, "")
+      : (activeProfile as any)?.currentLocation ?? "")
+
+  const scheduleItems = availabilityInfo.schedule
+    ? availabilityInfo.schedule
+        .replace(/^[^:]+:\s*/i, "")
+        .split(/[•,]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : []
+  const locationItems = availabilityInfo.locations
+    ? availabilityInfo.locations
+        .replace(/^[^:]+:\s*/i, "")
+        .split(/[•,]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : rawLocation
+    ? [rawLocation]
+    : []
+
+  const cardBase =
+    "rounded-2xl border border-white/10 bg-[#2d2d2d]/95 shadow-[0_8px_26px_rgba(0,0,0,0.45)] transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(0,0,0,0.5)] p-5 sm:p-6"
+  const sectionTitle =
+    "text-xs font-semibold uppercase tracking-[0.3em] text-white/60 sm:text-sm flex items-center gap-2"
+  const bodyText = "text-sm sm:text-base text-white/80"
 
   return (
     <div
@@ -771,14 +852,18 @@ export function ProfileCard({
       <div
         {...swipeHandlers}
         onClick={(event) => event.stopPropagation()}
-        className={`relative flex w-full max-w-5xl flex-col overflow-hidden rounded-[36px] border border-white/10 bg-[rgba(27,27,35,0.95)] shadow-[0_60px_180px_rgba(5,8,25,0.75)] backdrop-blur-[32px] transition-all duration-300 ease-out lg:flex-row ${
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        ref={modalRef}
+        className={`relative grid w-full max-w-6xl grid-rows-[auto,1fr] overflow-hidden rounded-[36px] border border-white/10 bg-[rgba(27,27,35,0.95)] shadow-[0_60px_180px_rgba(5,8,25,0.75)] backdrop-blur-[32px] transition-all duration-300 ease-out focus:outline-none lg:grid-cols-[360px,1fr] lg:grid-rows-[auto] lg:max-h-[88vh] ${
           isClosing ? "opacity-0" : "profile-card-enter"
         } ${showBoundaryFeedback === "left" ? "animate-bounce-left" : ""} ${showBoundaryFeedback === "right" ? "animate-bounce-right" : ""}`}
         style={{ transform: containerTransform, opacity: containerOpacity }}
       >
         <div className="absolute inset-0 rounded-[36px] bg-gradient-to-br from-white/5 via-transparent to-white/10 opacity-[0.18]" />
 
-        <div className="relative flex items-center justify-between px-8 pt-8">
+        <div className="relative flex items-center justify-between px-6 pt-6 sm:px-8 sm:pt-8 lg:col-span-2 lg:sticky lg:top-0 lg:z-10 lg:bg-[rgba(27,27,35,0.95)] lg:backdrop-blur-[32px]">
           <Button
             size="icon"
             variant="ghost"
@@ -825,22 +910,26 @@ export function ProfileCard({
           </div>
         </div>
 
-        <div className="relative mt-6 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 md:px-8">
-            <div className="flex flex-col gap-12 text-white lg:flex-row lg:items-start lg:gap-16">
-              <div className="flex w-full flex-col items-center text-center lg:w-[360px] lg:items-start lg:text-left">
+        <div
+          ref={scrollContainerRef}
+          tabIndex={0}
+          className="relative flex-1 overflow-y-auto pt-2 focus:outline-none lg:max-h-[calc(88vh-96px)] lg:pt-4"
+        >
+          <div className="mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6 md:px-8">
+            <div className="grid grid-cols-1 gap-12 text-white lg:grid-cols-[360px,1fr] lg:items-start lg:gap-16">
+              <div className="flex flex-col items-center text-center lg:sticky lg:top-24 lg:mt-4 lg:items-start lg:space-y-6 lg:text-left">
                 <div className="relative flex flex-col items-center lg:items-start">
                   <div className="relative mb-10">
                     <div
                       className="absolute inset-0 rounded-full blur-3xl"
                       style={{ background: "radial-gradient(circle, rgba(0,217,255,0.25) 0%, rgba(14,23,36,0.05) 65%)" }}
                     />
-                    <div className="relative flex h-40 w-40 items-center justify-center lg:h-44 lg:w-44">
+                    <div className="relative flex h-32 w-32 items-center justify-center shadow-[0_16px_36px_rgba(8,14,45,0.55)]">
                       <div
                         className="absolute inset-0 rounded-full opacity-90"
                         style={{ background: "linear-gradient(135deg, #00D9FF, #667EEA)" }}
                       />
-                      <div className="absolute inset-[6px] rounded-full bg-[#13141d] p-[4px] lg:inset-[8px]">
+                      <div className="absolute inset-[6px] rounded-full bg-[#13141d] p-[4px]">
                         <div className="relative h-full w-full overflow-hidden rounded-full">
                           {activeProfile.avatarUrl ? (
                             <img
@@ -849,13 +938,13 @@ export function ProfileCard({
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700/40 to-slate-900/60 text-6xl font-semibold">
+                            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700/40 to-slate-900/60 text-4xl font-semibold">
                               {activeProfile.avatar ?? activeProfile.displayName.charAt(0)}
                             </div>
                           )}
                         </div>
                         {isOnline && (
-                          <span className="absolute -bottom-2 -right-2 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#00FF88] shadow-[0_0_12px_rgba(0,255,136,0.7)]" />
+                          <span className="absolute -bottom-1.5 -right-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#11121c] bg-[#00FF88] shadow-[0_0_16px_rgba(0,255,136,0.75)]" />
                         )}
                       </div>
                     </div>
@@ -867,244 +956,322 @@ export function ProfileCard({
                     </div>
                   </div>
 
-                  <div className="text-xs uppercase tracking-[0.35em] text-white/45">Handle</div>
+                  <div className="mt-6 text-xs font-semibold uppercase tracking-[0.35em] text-white/45">
+                    Handle
+                  </div>
                   <div className="mt-1 text-sm text-white/65">{activeProfile.username}</div>
-                  <h2 className="mt-3 text-[28px] sm:text-[32px] font-semibold text-white">{activeProfile.displayName}</h2>
-                  <div className="mt-2 flex items-center gap-2 text-sm sm:text-base md:text-lg text-white/70">
-                    <span>{activeProfile.distance}</span>
-                    <span>•</span>
-                    <span className="text-[#00FF88]">{activeProfile.timeLeft || "Available now"}</span>
+                  <h2 className="mt-3 text-[28px] font-semibold text-white sm:text-[30px]">
+            {activeProfile.displayName}
+          </h2>
+                  <div className="mt-3 flex items-center gap-3 text-sm text-white/75 sm:text-base">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="h-4 w-4 text-white/60" />
+                      {distanceLabel}
+                    </span>
+                    <span className="text-white/40">•</span>
+                    <span className="flex items-center gap-1 text-[#00FF88]">
+                      <Zap className="h-4 w-4" />
+                      {timeToMeetLabel}
+                    </span>
                   </div>
-                </div>
-
-                <div className="mt-8 flex w-full flex-col gap-5">
-                  <div className={cardBase}>
-                    <div className="flex items-center gap-3 text-white">
-                      <span className="text-lg">📌</span>
-                      <div>
-                        <p className="font-semibold text-white/80">Distance & time</p>
-                        <p className={`${bodyText} mt-1`}>{activeProfile.distance} • {activeProfile.timeLeft || "Available now"}</p>
-                      </div>
+                  {(ratingValue || typeof reviewCountLabel === "number") && (
+                    <div className="mt-5 flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-6 py-4 text-center text-sm text-white/80 lg:items-start">
+                      {ratingValue && (
+                        <span className="text-base font-semibold text-white">
+                          ⭐ {ratingValue}
+                        </span>
+                      )}
+                      {typeof reviewCountLabel === "number" && (
+                        <span className="text-xs uppercase tracking-[0.25em] text-white/45">
+                          Based on {reviewCountLabel} review{reviewCountLabel === 1 ? "" : "s"}
+                        </span>
+                      )}
                     </div>
-                    <div className="mt-4 flex items-center gap-3 text-white">
-                      <span className="text-lg">💼</span>
-                      <div>
-                        <p className="font-semibold text-white/80">Primary language</p>
-                        <p className={`${bodyText} mt-1`}>
-                          {activeProfile.language}
-                          {activeProfile.languageLevel ? ` • ${activeProfile.languageLevel}` : ""}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className={cardBase}>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold text-[#7bffcc]">Current availability</p>
-                    <p className={`${bodyText} mt-2`}>{availabilityInfo.subtitle ?? "Flexible schedule"}</p>
-                    <p className="mt-4 text-xs uppercase tracking-[0.25em] text-white/40">Preferred locations</p>
-                    <p className={`${bodyText} mt-1`}>{availabilityInfo.locations ?? "Open to suggestions"}</p>
-                  </div>
+                  )}
                 </div>
               </div>
 
-              <div className="flex w-full flex-col gap-10 text-left">
+              </div>
+              <div className="flex w-full flex-col gap-10 text-left lg:pr-3">
                 <section>
-                  <h3 className={sectionTitle}>🎯 Compatibility</h3>
+                  <h3 className={sectionTitle}>📊 STATS</h3>
                   <div className={`${cardBase} mt-4`}>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {stats.map((stat, idx) => (
+                        <div
+                          key={`stat-${stat.label}-${idx}`}
+                          className="rounded-xl bg-[#3a3a3a]/85 px-4 py-4 text-center shadow-inner shadow-black/20"
+                        >
+                          <p className="text-2xl font-semibold text-white">{stat.value}</p>
+                          <p className="mt-1 text-[11px] uppercase tracking-[0.25em] text-white/55">
+                            {stat.label}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className={sectionTitle}>🎯 MATCH SCORE</h3>
+                  <div className={`${cardBase} mt-4 space-y-4`}>
                     <div className="flex flex-wrap items-center justify-between gap-3 text-white">
-                      <p className="text-2xl font-semibold">{compatibilityScore}% match</p>
+                      <span className="text-xl font-semibold sm:text-2xl">
+                        {compatibilityScore}% compatibility
+                      </span>
                       <span className="text-sm font-semibold text-[#5eead4]">
-                        {activeProfile.timeLeft || "Available now"}
+                        {compatibilityLabel}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm text-white/70">{compatibilityLabel}</p>
-                    <div className="mt-5 h-2 w-full rounded-full bg-[#2f2f3a]">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[#3a3a3a]">
                       <div
-                        className="h-full rounded-full"
-                        style={{ width: `${compatibilityScore}%`, background: "linear-gradient(90deg,#00FF88,#00D9FF)" }}
+                        className="h-full rounded-full bg-gradient-to-r from-[#00FF88] via-[#00f0cc] to-[#00D9FF]"
+                        style={{ width: `${compatibilityScore}%` }}
                       />
                     </div>
-                  </div>
-                </section>
-
-                <section>
-                  <h3 className={sectionTitle}>🗣️ Can Teach</h3>
-                  <div className="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
-                    {teaches.map((card, idx) => (
-                      <div
-                        key={`teach-${card.language}-${idx}`}
-                        className={`${cardBase} bg-[#2a2a34]/90`}
-                      >
-                        <div className="flex items-center justify-between text-white">
-                          <div className="flex items-center gap-3">
-                            <span className="text-2xl">{card.flag}</span>
-                            <div>
-                              <p className="text-base sm:text-lg md:text-xl font-semibold text-white">{card.language}</p>
-                              <p className="text-xs uppercase tracking-[0.2em] text-white/55">{card.level}</p>
-                            </div>
-                          </div>
-                          <span className="text-xs font-semibold text-[#9bdcff]">Native</span>
-                        </div>
-                        <div className="mt-4 h-2 w-full rounded-full bg-[#1d1d25]">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${card.progress ?? 100}%`, background: "linear-gradient(90deg,#00FF88,#00D9FF)" }}
-                          />
-                        </div>
-                        {card.description && (
-                          <p className={`${bodyText} mt-4 italic leading-relaxed text-white/70`}>“{card.description}”</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section>
-                  <h3 className={sectionTitle}>📚 Wants to Learn</h3>
-                  <div className="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
-                    {learns.map((card, idx) => (
-                      <div
-                        key={`learn-${card.language}-${idx}`}
-                        className={`${cardBase} bg-[#242434]/90`}
-                      >
-                        <div className="flex items-center justify-between text-white">
-                          <div className="flex items-center gap-3">
-                            <span className="text-2xl">{card.flag}</span>
-                            <div>
-                              <p className="text-base sm:text-lg md:text-xl font-semibold text-white">{card.language}</p>
-                              <p className="text-xs uppercase tracking-[0.2em] text-white/55">{card.level}</p>
-                            </div>
-                          </div>
-                          <span className="text-xs font-semibold text-[#c4c9ff]">Learning</span>
-                        </div>
-                        <div className="mt-4 h-2 w-full rounded-full bg-[#1e1f2d]">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${card.progress ?? 50}%`, background: "linear-gradient(90deg,#667EEA,#9F7AEA)" }}
-                          />
-                        </div>
-                        {card.description && (
-                          <p className={`${bodyText} mt-4 italic leading-relaxed text-white/70`}>“{card.description}”</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section>
-                  <h3 className={sectionTitle}>📊 Stats</h3>
-                  <div className="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
-                    {stats.map((stat, idx) => (
-                      <div
-                        key={`stat-${stat.label}-${idx}`}
-                        className={`${cardBase} bg-[#25252f]/85 text-center`}
-                      >
-                        <p className="text-lg sm:text-xl md:text-2xl font-semibold text-white">{stat.value}</p>
-                        <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/55">{stat.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section>
-                  <h3 className={sectionTitle}>⏰ Availability</h3>
-                  <div className={`${cardBase} mt-4 bg-[#272732]/90`}>
-                    <p className="text-base sm:text-lg md:text-xl font-semibold text-[#7bffcc]">
-                      {availabilityInfo.headline}
+                    <p className="text-xs uppercase tracking-[0.25em] text-white/45">
+                      {timeToMeetLabel}
                     </p>
-                    {availabilityInfo.subtitle && (
-                      <p className={`${bodyText} mt-2 text-white/75`}>{availabilityInfo.subtitle}</p>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className={sectionTitle}>🗣️ LANGUAGES</h3>
+                  <div className={`${cardBase} mt-4 space-y-8`}>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.25em] text-white/45">Can teach</p>
+                      <div className="mt-3 space-y-4">
+                        {teaches.map((card, idx) => (
+                          <div
+                            key={`teach-${card.language}-${idx}`}
+                            className="rounded-2xl border border-white/10 bg-[#3a3a3a]/90 p-5"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-3xl">{card.flag}</span>
+                              <div className="flex-1">
+                                <p className="text-lg font-semibold text-white sm:text-xl">
+                                  {card.language}
+                                </p>
+                                <p className="text-xs uppercase tracking-[0.2em] text-white/55">
+                                  {card.level}
+                                </p>
+                              </div>
+                              <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
+                                Native
+          </span>
+                            </div>
+                            <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-[#1d1d25]">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-[#00FF88] to-[#00D9FF]"
+                                style={{ width: `${card.progress ?? 100}%` }}
+                              />
+                            </div>
+                            {card.description && (
+                              <p className="mt-4 text-sm text-white/70">“{card.description}”</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+        </div>
+
+                    {learns.length > 0 && (
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.25em] text-white/45">Wants to learn</p>
+                        <div className="mt-3 space-y-4">
+                          {learns.map((card, idx) => (
+                            <div
+                              key={`learn-${card.language}-${idx}`}
+                              className="rounded-2xl border border-white/10 bg-[#2e2e48]/90 p-5"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-3xl">{card.flag}</span>
+                                <div className="flex-1">
+                                  <p className="text-lg font-semibold text-white sm:text-xl">
+                                    {card.language}
+                                  </p>
+                                  <p className="text-xs uppercase tracking-[0.2em] text-white/55">
+                                    {card.level}
+                                  </p>
+                                </div>
+                                <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
+                                  Learning
+                                </span>
+                              </div>
+                              <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-[#1e1f2d]">
+                                <div
+                                  className="h-full rounded-full bg-gradient-to-r from-[#667EEA] to-[#9F7AEA]"
+                                  style={{ width: `${card.progress ?? 55}%` }}
+                                />
+                              </div>
+                              {card.description && (
+                                <p className="mt-4 text-sm text-white/70">“{card.description}”</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
-                    {availabilityInfo.schedule && (
-                      <p className={`${bodyText} mt-4 text-white/70`}>{availabilityInfo.schedule}</p>
+                  </div>
+                </section>
+
+                {activeProfile.description && (
+                  <section>
+                    <h3 className={sectionTitle}>💬 ABOUT</h3>
+                    <div className={`${cardBase} mt-4`}>
+                      <p className="text-base leading-relaxed text-white/80">
+                        “{activeProfile.description}”
+                      </p>
+                    </div>
+                  </section>
+                )}
+
+                <section>
+                  <h3 className={sectionTitle}>📍 LOCATION & AVAILABILITY</h3>
+                  <div className={`${cardBase} mt-4 space-y-4`}>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">
+                        <p className="text-xs uppercase tracking-[0.25em] text-white/40">Distance</p>
+                        <p className="mt-2 text-base font-semibold text-white">{distanceLabel}</p>
+                      </div>
+                      <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">
+                        <p className="text-xs uppercase tracking-[0.25em] text-white/40">Time to meet</p>
+                        <p className="mt-2 text-base font-semibold text-[#00FF88]">{timeToMeetLabel}</p>
+                      </div>
+                      <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">
+                        <p className="text-xs uppercase tracking-[0.25em] text-white/40">City</p>
+                        <p className="mt-2 text-base font-semibold text-white">
+                          {locationItems[0] ?? "Not specified"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-[#1f1f29]/80 px-5 py-4 text-sm text-white/80">
+                      <p className="text-xs uppercase tracking-[0.25em] text-white/40">Status</p>
+                      <p className="mt-2 flex items-center gap-2 text-base font-semibold text-[#00FF88]">
+              <Zap className="h-4 w-4" />
+                        {availabilityInfo.headline}
+                      </p>
+                      {availabilityInfo.subtitle && (
+                        <p className="mt-1 text-sm text-white/70">{availabilityInfo.subtitle}</p>
+                      )}
+            </div>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className={sectionTitle}>🗓️ SCHEDULE</h3>
+                  <div className={`${cardBase} mt-4 space-y-5`}>
+                    {scheduleItems.length > 0 && (
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.25em] text-white/40">Usually active</p>
+                        <ul className="mt-3 space-y-2 text-sm text-white/75">
+                          {scheduleItems.map((item, idx) => (
+                            <li key={`schedule-${idx}`} className="flex items-center gap-2">
+                              <span className="text-xs text-white/35">•</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
-                    {availabilityInfo.locations && (
-                      <p className={`${bodyText} mt-2 text-white/70`}>{availabilityInfo.locations}</p>
+                    {locationItems.length > 0 && (
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.25em] text-white/40">Preferred locations</p>
+                        <ul className="mt-3 space-y-2 text-sm text-white/75">
+                          {locationItems.map((item, idx) => (
+                            <li key={`pref-${idx}`} className="flex items-center gap-2">
+                              <span className="text-xs text-white/35">•</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
                 </section>
 
                 <section>
-                  <h3 className={sectionTitle}>💬 Recent Reviews</h3>
-                  <div className="mt-4 space-y-4">
+                  <h3 className={sectionTitle}>💬 REVIEWS</h3>
+                  <div className={`${cardBase} mt-4 space-y-4`}>
                     {reviews.length > 0 ? (
                       reviews.map((review, idx) => (
                         <div
                           key={`review-${idx}`}
-                          className={`${cardBase} border-l-4 border-[#FFD700] bg-[#2d2d37]/95`}
+                          className="rounded-2xl border border-[#FFD700]/40 bg-[#2d2d37]/95 px-5 py-4 text-sm text-white/80"
                         >
-                          <div className="flex items-center gap-2 text-[#FFD700]">
+                          <div className="flex items-center gap-1 text-[#FFD700]">
                             {Array.from({ length: review.stars }).map((_, starIdx) => (
                               <span key={`star-${starIdx}`} className="text-base leading-none">
                                 ★
-                              </span>
+              </span>
                             ))}
-                          </div>
-                          <p className={`${bodyText} mt-3 text-white`}>{review.text}</p>
+            </div>
+                          <p className="mt-3 text-sm text-white">{review.text}</p>
                           <p className="mt-3 text-xs text-white/55">{review.author}</p>
                         </div>
                       ))
                     ) : (
-                      <div className={`${cardBase} bg-[#242430]/85 text-sm text-white/70`}>
+                      <div className="rounded-2xl border border-white/10 bg-[#242430]/85 px-5 py-6 text-center text-sm text-white/70">
                         No reviews yet. Start the first conversation!
+                        <p className="mt-3 text-xs text-white/45">
+                          Be the first to practice with {activeProfile.displayName.split(" ")[0] ?? activeProfile.displayName}.
+                        </p>
                       </div>
                     )}
                     {totalReviews > reviews.length && (
                       <button
                         type="button"
-                        className="text-sm sm:text-base font-medium text-[#667EEA] underline-offset-4 hover:underline"
+                        className="text-sm font-semibold text-[#667EEA] underline-offset-4 hover:underline sm:text-base"
                       >
                         View all {totalReviews} reviews →
                       </button>
                     )}
                   </div>
                 </section>
-              </div>
-            </div>
+          </div>
 
             <div className="mt-10 space-y-6">
               <div className="space-y-3 sm:space-y-4">
                 <Button
                   onClick={handleAskToMatchClick}
                   disabled={isMatchPending}
-                  className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-400 via-emerald-500 to-sky-500 text-base sm:text-lg md:text-xl font-semibold text-slate-900 shadow-[0_14px_45px_rgba(16,185,129,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_55px_rgba(16,185,129,0.45)] disabled:translate-y-0 disabled:opacity-60"
+                  className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#00FF88] via-[#00E0AF] to-[#00D9FF] text-base sm:text-lg md:text-xl font-semibold text-slate-900 shadow-[0_14px_45px_rgba(0,255,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(0,255,136,0.45)] disabled:translate-y-0 disabled:opacity-60"
                 >
                   <span className="text-xl">🤝</span>
-                  <span>{isMatchPending ? "Proposing trade..." : "Propose Language Trade"}</span>
+                  <span>{isMatchPending ? "PROPOSING TRADE..." : "PROPOSE LANGUAGE TRADE"}</span>
                 </Button>
                 <Button
                   onClick={handleSendMessageClick}
                   disabled={isMessagePending}
-                  className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#4f46e5] text-base sm:text-lg md:text-xl font-semibold text-white shadow-[0_14px_45px_rgba(79,70,229,0.4)] transition hover:-translate-y-0.5 hover:bg-[#5c55f1] disabled:translate-y-0 disabled:opacity-60"
+                  className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#667EEA] text-base sm:text-lg md:text-xl font-semibold text-white shadow-[0_14px_45px_rgba(102,126,234,0.4)] transition hover:-translate-y-0.5 hover:bg-[#7b8dff] disabled:translate-y-0 disabled:opacity-60"
                 >
                   <span className="text-xl">💬</span>
-                  <span>{isMessagePending ? "Opening chat..." : "Start Conversation"}</span>
+                  <span>{isMessagePending ? "OPENING CHAT..." : "START CONVERSATION"}</span>
                 </Button>
                 <Button
                   variant="outline"
                   onClick={handleInviteToEventClick}
                   disabled={isInvitePending}
-                  className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl border-2 border-white/25 bg-transparent text-base sm:text-lg md:text-xl font-semibold text-white transition hover:-translate-y-0.5 hover:border-[#6b6bff] hover:shadow-[0_18px_50px_rgba(102,126,234,0.35)] disabled:translate-y-0 disabled:opacity-60"
+                  className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl border-2 border-white/20 bg-transparent text-base sm:text-lg md:text-xl font-semibold text-white transition hover:-translate-y-0.5 hover:border-white/40 hover:shadow-[0_18px_50px_rgba(102,126,234,0.35)] disabled:translate-y-0 disabled:opacity-60"
                 >
                   <span className="text-xl">🎉</span>
-                  <span>{isInvitePending ? "Sending invite..." : "Invite to Practice Event"}</span>
+                  <span>{isInvitePending ? "SENDING INVITE..." : "INVITE TO PRACTICE EVENT"}</span>
                 </Button>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <Button
                   variant="outline"
-                  className="flex h-12 items-center justify-center gap-3 rounded-xl border border-white/20 bg-transparent text-sm sm:text-base font-medium text-white/70 transition hover:-translate-y-0.5 hover:border-white/40 hover:text-white"
+                  className="flex h-12 items-center justify-center gap-3 rounded-xl border border-white/20 bg-transparent text-sm sm:text-base font-semibold text-white/75 transition hover:-translate-y-0.5 hover:border-white/40 hover:text-white"
                 >
                   <span className="text-lg">⭐</span>
-                  Save
+                  SAVE
                 </Button>
                 <Button
                   variant="outline"
-                  className="flex h-12 items-center justify-center gap-3 rounded-xl border border-white/20 bg-transparent text-sm sm:text-base font-medium text-white/70 transition hover:-translate-y-0.5 hover:border-white/40 hover:text-white"
+                  className="flex h-12 items-center justify-center gap-3 rounded-xl border border-white/20 bg-transparent text-sm sm:text-base font-semibold text-white/75 transition hover:-translate-y-0.5 hover:border-white/40 hover:text-white"
                 >
                   <span className="text-lg">📤</span>
-                  Share Profile
+                  SHARE PROFILE
                 </Button>
               </div>
 
