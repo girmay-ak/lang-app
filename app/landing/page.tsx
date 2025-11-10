@@ -1,6 +1,5 @@
 "use client"
 
-import Image from "next/image"
 import { useRef, useState, useEffect } from "react"
 import Link from "next/link"
 import { ArrowRight, Globe2, MessageSquare, Sparkles, UsersRound, Play, Check, Star, Download, MapPin, Coffee, Trophy, Zap, TrendingUp, Radio, Map, Gamepad2, Camera, Gift, X, MessageCircle, Award, Shield, Clock, Smartphone, Languages, MessageSquareText } from "lucide-react"
@@ -187,7 +186,7 @@ const HeroWorldMap = () => {
         ref={hubRef}
         className="absolute left-1/2 top-1/2 flex h-36 w-36 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-[2.5rem] border border-white/20 bg-gradient-to-br from-[#7c3aed]/40 via-[#9333ea]/35 to-[#22d3ee]/30 text-center text-white shadow-[0_20px_60px_rgba(124,58,237,0.35)] backdrop-blur"
       >
-        <p className="text-lg font-semibold">You + Orbit</p>
+        <p className="text-lg font-semibold">Taal Match</p>
         <p className="mt-2 text-xs text-white/80">Algorithm pairs you with native partners in real time.</p>
       </div>
 
@@ -270,7 +269,7 @@ const LanguageBeamShowcase = () => {
             ref={hubRef}
             className="flex h-40 w-40 flex-col items-center justify-center rounded-[3rem] border border-white/20 bg-gradient-to-br from-[#7c3aed]/40 via-[#9333ea]/40 to-[#0ea5e9]/40 text-center text-white shadow-[0_20px_50px_rgba(124,58,237,0.35)] backdrop-blur"
           >
-            <p className="text-lg font-semibold">Orbit Hub</p>
+            <p className="text-lg font-semibold">Taal Matches</p>
             <p className="mt-1 text-xs text-white/80">Live matches & prompts</p>
           </div>
         </div>
@@ -364,9 +363,6 @@ export default function LandingPage() {
             <Link href="#features" className="transition hover:text-white">
               Features
             </Link>
-            <Link href="#how-it-works" className="transition hover:text-white">
-              How It Works
-            </Link>
             <Link href="#cta" className="transition hover:text-white">
               Join Us
             </Link>
@@ -395,15 +391,15 @@ export default function LandingPage() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-300" />
               </span>
-              100% Free Forever • No Credit Card Required
+              Early Access Beta • Pricing Announced Soon
             </div>
 
             {/* Headline */}
             <div className="space-y-6">
               <h1 className="max-w-3xl text-4xl font-black tracking-tight text-white md:text-5xl lg:text-6xl leading-tight">
-                Learn Languages for FREE—Save{" "}
+                Learn Languages with Real Partners{" "}
                 <span className="bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                  €7,200/Year
+               
                 </span>
             </h1>
               <p className="max-w-2xl text-lg md:text-xl text-slate-200 leading-relaxed">
@@ -424,7 +420,7 @@ export default function LandingPage() {
                 { icon: Coffee, text: "Practice over coffee, not in boring classrooms" },
                 { icon: Trophy, text: "Track progress with gamification (XP, streaks, badges)" },
                 { icon: UsersRound, text: "Make international friends while learning" },
-                { icon: Gift, text: "100% FREE forever - no credit card required" },
+                { icon: Gift, text: "Founders access with flexible pricing coming soon" },
               ].map((benefit, index) => (
                 <div key={index} className="flex items-start gap-3">
                   <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
@@ -442,16 +438,16 @@ export default function LandingPage() {
                 className="group relative inline-flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 px-8 md:px-12 py-4 md:py-5 text-base md:text-lg font-bold text-white shadow-[0_20px_60px_rgba(16,185,129,0.5)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_80px_rgba(16,185,129,0.6)] hover:scale-105 w-full md:w-auto min-h-[56px] animate-pulse"
               >
                 <Download className="h-5 w-5" />
-                <span className="hidden sm:inline">📱 </span>Download Free - iOS & Android
+                <span className="hidden sm:inline">📱 </span>Get the App - iOS & Android
                 <ArrowRight className="h-5 w-5 transition group-hover:translate-x-1" />
                 <span className="absolute inset-0 rounded-2xl bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 opacity-0 blur-xl transition-opacity group-hover:opacity-50" />
               </Link>
               <Link
-                href="#how-it-works"
+                href="#features"
                 className="group inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-white/30 bg-white/10 px-8 py-5 text-base font-semibold text-white/90 backdrop-blur transition hover:bg-white/20 hover:text-white hover:border-white/50"
               >
                 <Play className="h-5 w-5" />
-                Watch 30-sec Demo
+                Explore interactive tour
               </Link>
             </div>
 
@@ -476,24 +472,28 @@ export default function LandingPage() {
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-300">
                 <Zap className="h-5 w-5 text-yellow-400" />
-                <span className="font-semibold text-emerald-400">100% Free Forever</span>
+                <span className="font-semibold text-emerald-400">Founders beta now open</span>
               </div>
             </div>
 
             {/* Social Proof Avatars */}
             <div className="flex flex-wrap items-center gap-5 pt-4">
               <div className="flex -space-x-3">
-                {["/diverse-person-smiling.png", "/serene-asian-woman.png", "/man-glasses-beard.jpg", "/woman-pink.jpg", "/professional-woman.png"].map(
-                  (avatar, index) => (
-                    <div
-                      key={avatar}
-                      className="overflow-hidden rounded-full border-2 border-emerald-500/50 shadow-lg shadow-emerald-500/30 animate-float"
-                      style={{ animationDelay: `${index * 0.2}s` }}
-                    >
-                      <Image src={avatar} alt={`Community member ${index + 1}`} width={56} height={56} className="h-14 w-14 object-cover" />
-                    </div>
-                  ),
-                )}
+                {[
+                  { emoji: "🌍", gradient: "from-emerald-500/40 to-cyan-500/40" },
+                  { emoji: "🪷", gradient: "from-pink-500/40 to-purple-500/40" },
+                  { emoji: "🧠", gradient: "from-blue-500/40 to-indigo-500/40" },
+                  { emoji: "🎨", gradient: "from-rose-500/40 to-orange-500/40" },
+                  { emoji: "🎧", gradient: "from-teal-500/40 to-emerald-500/40" },
+                ].map((avatar, index) => (
+                  <div
+                    key={`${avatar.emoji}-${index}`}
+                    className={`flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-500/50 bg-gradient-to-br ${avatar.gradient} shadow-lg shadow-emerald-500/30 animate-float`}
+                    style={{ animationDelay: `${index * 0.2}s` }}
+                  >
+                    <span className="text-2xl">{avatar.emoji}</span>
+                  </div>
+                ))}
               </div>
               <p className="text-base font-medium text-white/80">
                 Join <span className="font-bold text-emerald-400">127,000+</span> language learners practicing daily
@@ -550,8 +550,8 @@ export default function LandingPage() {
               Everything You Need to Master Languages
             </h2>
             <p className="max-w-2xl mx-auto text-lg text-slate-300">
-              We've built features that make language learning addictive, social, and completely free.
-              </p>
+              We've built features that make language learning addictive, social, and worth every session.
+            </p>
             </div>
 
           {/* Features Grid */}
@@ -640,7 +640,7 @@ export default function LandingPage() {
               </div>
                 <h3 className="mb-3 text-2xl font-bold text-white">Practice via Text, Voice & Video</h3>
                 <p className="mb-4 text-slate-300 leading-relaxed">
-                  Chat, send voice messages, make video calls. All in-app, all FREE, all the time.
+                  Chat, send voice messages, make video calls. All in-app, on your schedule.
                 </p>
                 <div className="flex flex-wrap gap-2 mt-4">
                   <span className="rounded-full bg-cyan-500/20 border border-cyan-400/30 px-3 py-1 text-xs font-semibold text-cyan-400">
@@ -675,7 +675,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Feature 6: Free Forever */}
+            {/* Feature 6: Founders Access */}
             <div className="group relative rounded-3xl border-2 border-emerald-500/50 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 p-8 shadow-lg shadow-emerald-500/20 backdrop-blur transition-all duration-300 hover:border-emerald-400 hover:shadow-emerald-500/30 hover:-translate-y-2">
               <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-emerald-500/10 to-transparent opacity-100" />
               <div className="relative">
@@ -687,470 +687,28 @@ export default function LandingPage() {
                     BEST VALUE
                   </span>
               </div>
-                <h3 className="mb-3 text-2xl font-bold text-white">Zero Cost. No Tricks.</h3>
+                <h3 className="mb-3 text-2xl font-bold text-white">Founders Access Perks</h3>
                 <p className="mb-4 text-slate-200 leading-relaxed">
-                  No subscription, no per-lesson fees, no hidden costs. Completely free forever.
+                  Early supporters lock in exclusive perks while we finalize transparent pricing plans.
                 </p>
                 <div className="space-y-2 mt-4">
                   <div className="flex items-center gap-2 text-sm text-emerald-300">
                     <Check className="h-4 w-4" />
-                    <span>Always Free</span>
+                    <span>Founders-only rewards</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-emerald-300">
                     <Check className="h-4 w-4" />
-                    <span>No Credit Card</span>
+                    <span>Pricing revealed soon</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-emerald-300">
                     <Check className="h-4 w-4" />
-                    <span>No Ads (Basic Plan)</span>
+                    <span>Cancel anytime promise</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Comparison Table */}
-          <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-8 md:p-12 shadow-xl backdrop-blur">
-            <div className="text-center mb-8">
-              <h3 className="text-3xl font-bold text-white mb-2">See How We Compare</h3>
-              <p className="text-slate-300">LangEx vs. the competition</p>
-        </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/10">
-                    <th className="text-left py-4 px-4 text-sm font-semibold text-slate-300">Feature</th>
-                    <th className="text-center py-4 px-4 text-sm font-semibold text-slate-300">Language Schools</th>
-                    <th className="text-center py-4 px-4 text-sm font-semibold text-slate-300">Duolingo</th>
-                    <th className="text-center py-4 px-4 text-sm font-semibold text-slate-300">Private Tutors</th>
-                    <th className="text-center py-4 px-4 text-sm font-semibold text-emerald-400 bg-emerald-500/10 rounded-lg">LangEx</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/10">
-                  {[
-                    { feature: "Real Human Practice", schools: true, duolingo: false, tutors: true, langex: true },
-                    { feature: "Proximity Alerts", schools: false, duolingo: false, tutors: false, langex: true },
-                    { feature: "Gamification", schools: false, duolingo: true, tutors: false, langex: true },
-                    { feature: "Unlimited Practice", schools: false, duolingo: "Limited", tutors: false, langex: true },
-                    { feature: "In-Person Meetups", schools: true, duolingo: false, tutors: true, langex: true },
-                    { feature: "Video Calls", schools: false, duolingo: false, tutors: true, langex: true },
-                    { feature: "Social Features", schools: false, duolingo: false, tutors: false, langex: true },
-                  ].map((row, index) => (
-                    <tr key={index} className="hover:bg-white/5 transition-colors">
-                      <td className="py-4 px-4 font-medium text-white">{row.feature}</td>
-                      <td className="py-4 px-4 text-center text-slate-300">
-                        {typeof row.schools === "boolean" ? (
-                          row.schools ? <Check className="h-5 w-5 text-emerald-400 mx-auto" /> : <X className="h-5 w-5 text-red-400 mx-auto" />
-                        ) : (
-                          row.schools
-                        )}
-                      </td>
-                      <td className="py-4 px-4 text-center text-slate-300">
-                        {typeof row.duolingo === "boolean" ? (
-                          row.duolingo ? <Check className="h-5 w-5 text-emerald-400 mx-auto" /> : <X className="h-5 w-5 text-red-400 mx-auto" />
-                        ) : (
-                          row.duolingo
-                        )}
-                      </td>
-                      <td className="py-4 px-4 text-center text-slate-300">
-                        {typeof row.tutors === "boolean" ? (
-                          row.tutors ? <Check className="h-5 w-5 text-emerald-400 mx-auto" /> : <X className="h-5 w-5 text-red-400 mx-auto" />
-                        ) : (
-                          row.tutors
-                        )}
-                      </td>
-                      <td className={`py-4 px-4 text-center font-semibold ${row.langexHighlight ? "text-emerald-400 bg-emerald-500/10 rounded-lg" : "text-emerald-400"}`}>
-                        {typeof row.langex === "boolean" ? (
-                          row.langex ? <Check className="h-6 w-6 text-emerald-400 mx-auto" /> : <X className="h-6 w-6 text-red-400 mx-auto" />
-                        ) : (
-                          row.langex
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Why LangEx Beats Everything Else */}
-          <div className="rounded-3xl border-2 border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-cyan-500/5 to-blue-500/10 p-8 md:p-12 shadow-xl shadow-emerald-500/20 backdrop-blur">
-            <div className="text-center mb-12">
-              <h3 className="text-4xl font-bold text-white mb-3">Why LangEx Beats Everything Else</h3>
-              <p className="text-lg text-slate-300">The numbers don't lie</p>
-            </div>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              {[
-                { stat: "3X", label: "Faster than apps", icon: Zap, color: "yellow" },
-                { stat: "10X", label: "More fun than textbooks", icon: Sparkles, color: "purple" },
-                { stat: "100%", label: "Real human practice", icon: UsersRound, color: "cyan" },
-                { stat: "FREE", label: "Forever free", icon: Gift, color: "emerald" },
-              ].map((item, index) => (
-                <div
-                  key={index}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center backdrop-blur transition-all hover:border-white/20 hover:bg-white/10 hover:-translate-y-1"
-                >
-                  <div className={`mb-4 flex justify-center`}>
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-${item.color}-500/20 border border-${item.color}-400/30`}>
-                      <item.icon className={`h-6 w-6 text-${item.color}-400`} />
-                  </div>
-                  </div>
-                  <div className="text-4xl font-black text-white mb-2">{item.stat}</div>
-                  <div className="text-sm text-slate-300">{item.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section id="how-it-works" className="relative z-10 mx-auto max-w-7xl px-6 py-20 md:px-10 lg:px-12">
-        <div className="space-y-16">
-          {/* Header */}
-          <div className="text-center space-y-4">
-            <p className="inline-flex items-center gap-2 rounded-full bg-cyan-500/10 border border-cyan-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-cyan-400">
-              <Zap className="h-4 w-4" />
-              Simple Process
-            </p>
-            <h2 className="text-4xl md:text-5xl font-black text-white">
-              Start Speaking in 3 Minutes
-            </h2>
-            <p className="max-w-2xl mx-auto text-lg text-slate-300">
-              Dead simple. No complicated setup. Just download and go.
-            </p>
-                </div>
-
-          {/* Steps Timeline */}
-          <div className="relative">
-            {/* Progress Bar */}
-            <div className="hidden md:block absolute top-0 left-0 right-0 h-1 bg-white/10 rounded-full">
-              <div className="h-full bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 rounded-full w-full" />
-            </div>
-
-            {/* Steps Grid */}
-            <div className="grid gap-12 md:gap-16 mt-8">
-              {[
-                {
-                  number: 1,
-                  icon: Smartphone,
-                  title: "Download Free",
-                  description: "Get the app on iOS or Android. Sign up with Google, Facebook, or email. Takes 30 seconds.",
-                  example: "App Store • Google Play",
-                  color: "emerald",
-                  visual: (
-                    <div className="relative w-full max-w-xs mx-auto">
-                      <div className="aspect-[9/19] bg-gradient-to-br from-slate-800 to-slate-900 rounded-[3rem] p-3 shadow-2xl border-4 border-white/10">
-                        <div className="w-full h-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 rounded-[2.5rem] flex items-center justify-center">
-                          <div className="text-center space-y-4">
-                            <div className="w-20 h-20 mx-auto bg-white rounded-3xl flex items-center justify-center shadow-lg">
-                              <Smartphone className="h-10 w-10 text-emerald-500" />
-                            </div>
-                            <p className="text-white text-sm font-semibold">Downloading...</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ),
-                },
-                {
-                  number: 2,
-                  icon: Languages,
-                  title: "Choose Your Languages",
-                  description: "Pick what you speak (teach) and what you want to learn. We'll find perfect matches!",
-                  example: "I speak: 🇬🇧 English | I'm learning: 🇳🇱 Dutch",
-                  color: "blue",
-                  visual: (
-                    <div className="relative w-full max-w-xs mx-auto">
-                      <div className="aspect-[9/19] bg-gradient-to-br from-slate-800 to-slate-900 rounded-[3rem] p-3 shadow-2xl border-4 border-white/10">
-                        <div className="w-full h-full bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-[2.5rem] p-6 flex flex-col gap-4">
-                          <h3 className="text-white font-bold text-lg">Select Languages</h3>
-                          <div className="space-y-3">
-                            <div className="bg-white/10 rounded-2xl p-4">
-                              <p className="text-xs text-slate-400 mb-2">I speak</p>
-                              <div className="flex items-center gap-2">
-                                <span className="text-2xl">🇬🇧</span>
-                                <span className="text-white font-semibold">English</span>
-                              </div>
-                            </div>
-                            <div className="bg-white/10 rounded-2xl p-4 border-2 border-blue-400/50">
-                              <p className="text-xs text-slate-400 mb-2">I'm learning</p>
-                              <div className="flex items-center gap-2">
-                                <span className="text-2xl">🇳🇱</span>
-                                <span className="text-white font-semibold">Dutch</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ),
-                },
-                {
-                  number: 3,
-                  icon: Map,
-                  title: "See Who's Close",
-                  description: "Open the map and see language partners within walking distance. Filter by language, level, availability.",
-                  example: "12 partners within 500m • 3 available NOW",
-                  highlight: "⚡ Get alerts when someone's at your cafe!",
-                  color: "cyan",
-                  visual: (
-                    <div className="relative w-full max-w-xs mx-auto">
-                      <div className="aspect-[9/19] bg-gradient-to-br from-slate-800 to-slate-900 rounded-[3rem] p-3 shadow-2xl border-4 border-white/10">
-                        <div className="w-full h-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-[2.5rem] p-4 relative overflow-hidden">
-                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(6,182,212,0.3),transparent)]" />
-                          <div className="relative z-10 h-full flex flex-col">
-                            <div className="mb-4">
-                              <h3 className="text-white font-bold text-lg mb-2">Nearby Partners</h3>
-                              <div className="bg-emerald-500/30 border border-emerald-400/50 rounded-xl p-3 mb-2">
-                                <p className="text-xs text-emerald-200 font-semibold">⚡ Someone's at your cafe!</p>
-                              </div>
-                              <div className="bg-white/10 rounded-xl p-3">
-                                <p className="text-white text-sm font-semibold">12 nearby</p>
-                                <p className="text-emerald-400 text-xs">3 available now</p>
-                              </div>
-                            </div>
-                            <div className="flex-1 bg-white/5 rounded-2xl relative">
-                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center border-4 border-white shadow-lg animate-pulse">
-                                <MapPin className="h-8 w-8 text-white" />
-                              </div>
-                              <div className="absolute top-1/4 left-1/4 w-8 h-8 bg-blue-500 rounded-full border-2 border-white" />
-                              <div className="absolute top-1/3 right-1/4 w-8 h-8 bg-purple-500 rounded-full border-2 border-white" />
-                              <div className="absolute bottom-1/4 left-1/3 w-8 h-8 bg-pink-500 rounded-full border-2 border-white" />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ),
-                },
-                {
-                  number: 4,
-                  icon: MessageSquareText,
-                  title: "Say Hi & Schedule",
-                  description: "Send a message, schedule a coffee meetup, or meet spontaneously with proximity alerts!",
-                  example: "Hey! Want to practice Dutch over coffee? I'm at Starbucks! ☕",
-                  color: "purple",
-                  visual: (
-                    <div className="relative w-full max-w-xs mx-auto">
-                      <div className="aspect-[9/19] bg-gradient-to-br from-slate-800 to-slate-900 rounded-[3rem] p-3 shadow-2xl border-4 border-white/10">
-                        <div className="w-full h-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-[2.5rem] p-4 flex flex-col">
-                          <div className="mb-4">
-                            <h3 className="text-white font-bold text-lg">Messages</h3>
-                          </div>
-                          <div className="flex-1 space-y-3">
-                            <div className="bg-white/10 rounded-2xl p-3 ml-auto max-w-[80%]">
-                              <p className="text-white text-sm">Hey! Want to practice Dutch over coffee? I'm at Starbucks! ☕</p>
-                              <p className="text-xs text-slate-400 mt-1">Just now</p>
-                            </div>
-                            <div className="bg-purple-500/30 rounded-2xl p-3 mr-auto max-w-[80%]">
-                              <p className="text-white text-sm">Yes! Be there in 5 min 🚶</p>
-                              <p className="text-xs text-slate-300 mt-1">Just now</p>
-                            </div>
-                          </div>
-                          <div className="mt-4 flex gap-2">
-                            <div className="flex-1 bg-white/10 rounded-full px-4 py-2">
-                              <p className="text-slate-400 text-sm">Type a message...</p>
-                            </div>
-                            <button className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
-                              <ArrowRight className="h-5 w-5 text-white" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ),
-                },
-                {
-                  number: 5,
-                  icon: Trophy,
-                  title: "Track Your Progress",
-                  description: "Earn XP, build streaks, unlock badges. Turn learning into an addictive game!",
-                  example: "Level 12 • 30-day streak 🔥 • 47 practices",
-                  color: "yellow",
-                  visual: (
-                    <div className="relative w-full max-w-xs mx-auto">
-                      <div className="aspect-[9/19] bg-gradient-to-br from-slate-800 to-slate-900 rounded-[3rem] p-3 shadow-2xl border-4 border-white/10">
-                        <div className="w-full h-full bg-gradient-to-br from-yellow-500/20 to-orange-500/20 rounded-[2.5rem] p-6 flex flex-col gap-4">
-                          <div className="text-center">
-                            <div className="w-20 h-20 mx-auto bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mb-3 shadow-lg">
-                              <Trophy className="h-10 w-10 text-white" />
-                            </div>
-                            <h3 className="text-white font-bold text-xl">Level 12</h3>
-                            <p className="text-slate-300 text-sm">Language Enthusiast</p>
-                          </div>
-                          <div className="space-y-3">
-                <div>
-                              <div className="flex justify-between text-sm mb-1">
-                                <span className="text-slate-300">XP Progress</span>
-                                <span className="text-yellow-400 font-semibold">2,450 / 3,000</span>
-                </div>
-                              <div className="h-3 bg-white/10 rounded-full overflow-hidden">
-                                <div className="h-full w-[82%] bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full" />
-              </div>
-                  </div>
-                            <div className="bg-white/10 rounded-xl p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-slate-300 text-sm">Streak</span>
-                                <span className="text-orange-400 font-bold">🔥 30 days</span>
-                      </div>
-                  <div className="flex items-center justify-between">
-                                <span className="text-slate-300 text-sm">Practices</span>
-                                <span className="text-yellow-400 font-bold">47</span>
-                  </div>
-                            </div>
-                            <div className="flex gap-2">
-                              {["🏆", "⭐", "🎯", "🔥"].map((badge, i) => (
-                                <div key={i} className="flex-1 aspect-square bg-white/10 rounded-xl flex items-center justify-center text-2xl">
-                                  {badge}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ),
-                },
-              ].map((step, index) => (
-                <div
-                  key={index}
-                  className={`flex flex-col ${index % 2 === 0 ? "md:flex-row" : "md:flex-row-reverse"} items-center gap-8 md:gap-12`}
-                >
-                  <div className="flex-1 space-y-4">
-                    <div className="flex items-center gap-4">
-                      <div className={`flex h-16 w-16 items-center justify-center rounded-2xl bg-${step.color}-500/20 border-2 border-${step.color}-400/50 shadow-lg`}>
-                        <step.icon className={`h-8 w-8 text-${step.color}-400`} />
-                  </div>
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 text-white font-black text-xl shadow-lg">
-                        {step.number}
-                      </div>
-                    </div>
-                    <h3 className="text-3xl font-bold text-white">{step.title}</h3>
-                    <p className="text-lg text-slate-300 leading-relaxed">{step.description}</p>
-                    {step.example && (
-                      <div className="rounded-xl bg-white/5 border border-white/10 p-4">
-                        <p className="text-sm text-slate-300">
-                          <span className="font-semibold text-white">Example:</span> {step.example}
-                    </p>
-                  </div>
-                    )}
-                    {step.highlight && (
-                      <div className={`rounded-xl bg-${step.color}-500/20 border border-${step.color}-400/30 p-4`}>
-                        <p className={`text-sm font-semibold text-${step.color}-400`}>{step.highlight}</p>
-                </div>
-                    )}
-                  </div>
-                  <div className="flex-1">{step.visual}</div>
-                </div>
-              ))}
-              </div>
-            </div>
-
-          {/* Comparison Timeline */}
-          <div className="rounded-3xl border-2 border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-8 md:p-12 shadow-xl backdrop-blur">
-            <div className="text-center mb-8">
-              <h3 className="text-3xl font-bold text-white mb-2">See the Difference</h3>
-              <p className="text-slate-300">Language School vs. LangEx</p>
-                    </div>
-            <div className="grid md:grid-cols-2 gap-8">
-              {/* Language School */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/20 border border-red-400/30">
-                    <X className="h-6 w-6 text-red-400" />
-                  </div>
-                  <h4 className="text-2xl font-bold text-white">Language School</h4>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    { time: "Day 1", action: "Pay €600", icon: X, color: "red" },
-                    { time: "Week 1", action: "Attend first class (boring)", icon: X, color: "red" },
-                    { time: "Week 4", action: "Still can't hold conversation", icon: X, color: "red" },
-                    { time: "Month 3", action: "€1,800 spent 😭", icon: X, color: "red" },
-                    { time: "Month 6", action: "Slight improvement", icon: X, color: "red" },
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/5">
-                      <item.icon className={`h-5 w-5 text-${item.color}-400 mt-0.5 flex-shrink-0`} />
-                  <div>
-                        <span className="text-sm font-semibold text-white">{item.time}:</span>
-                        <span className="text-sm text-slate-300 ml-2">{item.action}</span>
-                  </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-              {/* LangEx */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/20 border border-emerald-400/30">
-                    <Check className="h-6 w-6 text-emerald-400" />
-                </div>
-                  <h4 className="text-2xl font-bold text-white">LangEx</h4>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    { time: "Minute 1", action: "Download ✅", icon: Check, color: "emerald" },
-                    { time: "Minute 3", action: "First match found 🎉", icon: Check, color: "emerald" },
-                    { time: "Hour 1", action: "First practice session", icon: Check, color: "emerald" },
-                    { time: "Day 7", action: "30+ minutes practiced", icon: Check, color: "emerald" },
-                    { time: "Week 2", action: "First real conversation!", icon: Check, color: "emerald" },
-                    { time: "Month 1", action: "Conversational fluency", icon: Check, color: "emerald" },
-                    { time: "Month 6", action: "Near-native • €0 spent 😎", icon: Check, color: "emerald" },
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-400/20">
-                      <item.icon className={`h-5 w-5 text-${item.color}-400 mt-0.5 flex-shrink-0`} />
-                <div>
-                        <span className="text-sm font-semibold text-white">{item.time}:</span>
-                        <span className="text-sm text-slate-200 ml-2">{item.action}</span>
-                </div>
-              </div>
-                  ))}
-                  </div>
-                      </div>
-                  </div>
-          </div>
-
-          {/* Video Demo */}
-          <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-8 md:p-12 backdrop-blur overflow-hidden relative group">
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-pink-500/10 to-orange-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="relative z-10 text-center space-y-6">
-              <h3 className="text-3xl font-bold text-white">Watch How It Works</h3>
-              <p className="text-slate-300">See LangEx in action (60 seconds)</p>
-              <div className="relative max-w-2xl mx-auto aspect-video rounded-2xl overflow-hidden border-4 border-white/20 shadow-2xl bg-gradient-to-br from-slate-800 to-slate-900">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <button className="group/play flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 shadow-2xl transition-all hover:scale-110 hover:shadow-emerald-500/50">
-                    <Play className="h-12 w-12 text-white ml-1 group-hover/play:scale-110 transition-transform" fill="white" />
-                  </button>
-                </div>
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.2),transparent)]" />
-                <div className="absolute bottom-4 left-4 right-4 text-left">
-                  <p className="text-white font-semibold mb-1">LangEx Demo</p>
-                  <p className="text-sm text-slate-300">See download, matching, proximity alerts, and gamification</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* CTA */}
-          <div className="text-center space-y-6 rounded-3xl border-2 border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-cyan-500/5 to-blue-500/10 p-8 md:p-12 shadow-xl shadow-emerald-500/20">
-            <h3 className="text-4xl font-black text-white">Ready to Start?</h3>
-            <p className="text-lg text-slate-300">Join 127,000+ language learners worldwide</p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 w-full">
-              <Link
-                href="/signup"
-                className="group relative inline-flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 px-8 md:px-12 py-4 md:py-5 text-base md:text-lg font-bold text-white shadow-[0_20px_60px_rgba(16,185,129,0.5)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_80px_rgba(16,185,129,0.6)] hover:scale-105 w-full sm:w-auto min-h-[56px]"
-              >
-                <Download className="h-5 w-5" />
-                <span className="hidden sm:inline">📱 </span>Download Now - It's FREE
-                <ArrowRight className="h-5 w-5 transition group-hover:translate-x-1" />
-              </Link>
-            </div>
-            <p className="text-sm text-slate-400 pt-2 text-center">
-              No credit card • No subscription • No BS
-                    </p>
-          </div>
         </div>
       </section>
 
@@ -1226,7 +784,7 @@ export default function LandingPage() {
                   name: "Sarah",
                   age: 24,
                   location: "Amsterdam",
-                  photo: "/diverse-person-smiling.png",
+                  avatar: { emoji: "🌿", gradient: "from-emerald-500/30 to-blue-500/30" },
                   quote: "I moved to Netherlands and couldn't afford €600/month schools. Found LangEx and made 12 Dutch friends in 2 months! Now I'm fluent and it cost me ZERO.",
                   languages: ["🇳🇱 Dutch", "🇬🇧 English"],
                   badge: { text: "Saved €7,200", color: "emerald" },
@@ -1235,7 +793,7 @@ export default function LandingPage() {
                   name: "Mike",
                   age: 28,
                   location: "Berlin",
-                  photo: "/man-glasses-beard.jpg",
+                  avatar: { emoji: "🎸", gradient: "from-purple-500/30 to-indigo-500/30" },
                   quote: "Better than my expensive school! The proximity alerts are genius—I met someone at my cafe and we practiced for an hour. So natural!",
                   languages: ["🇩🇪 German", "🇬🇧 English"],
                   badge: { text: "30-Day Streak", color: "purple" },
@@ -1244,7 +802,7 @@ export default function LandingPage() {
                   name: "Emma",
                   age: 22,
                   location: "Barcelona",
-                  photo: "/serene-asian-woman.png",
+                  avatar: { emoji: "🎨", gradient: "from-rose-500/30 to-orange-500/30" },
                   quote: "Duolingo was boring. This is FUN! I practice daily now because it's like a game. Plus I made real friends!",
                   languages: ["🇪🇸 Spanish", "🇬🇧 English"],
                   badge: { text: "Level 15", color: "pink" },
@@ -1253,7 +811,7 @@ export default function LandingPage() {
                   name: "Tom",
                   age: 31,
                   location: "Paris",
-                  photo: "/man-glasses-beard.jpg",
+                  avatar: { emoji: "🚀", gradient: "from-blue-500/30 to-cyan-500/30" },
                   quote: "Used it to prepare for my move to France. Started practicing 3 months before. By the time I arrived, I was already conversational!",
                   languages: ["🇫🇷 French", "🇬🇧 English"],
                   badge: { text: "5 Countries", color: "blue" },
@@ -1262,7 +820,7 @@ export default function LandingPage() {
                   name: "Lisa",
                   age: 26,
                   location: "Madrid",
-                  photo: "/professional-woman.png",
+                  avatar: { emoji: "📚", gradient: "from-yellow-500/30 to-amber-500/30" },
                   quote: "As a language teacher, I'm impressed! The gamification keeps students motivated. I recommend it to all my students.",
                   languages: ["Multiple"],
                   badge: { text: "Verified Teacher", color: "yellow" },
@@ -1271,7 +829,7 @@ export default function LandingPage() {
                   name: "Carlos",
                   age: 29,
                   location: "Lisbon",
-                  photo: "/man-glasses-beard.jpg",
+                  avatar: { emoji: "🌊", gradient: "from-cyan-500/30 to-emerald-500/30" },
                   quote: "Saved me thousands! Plus the people I met became real friends. Can't recommend enough.",
                   languages: ["🇵🇹 Portuguese", "🇪🇸 Spanish"],
                   badge: { text: "47 Practices", color: "cyan" },
@@ -1283,17 +841,15 @@ export default function LandingPage() {
                 >
                   <div className="flex items-start gap-4 mb-4">
                     <div className="relative flex-shrink-0">
-                      <Image
-                        src={testimonial.photo}
-                        alt={testimonial.name}
-                        width={56}
-                        height={56}
-                        className="h-14 w-14 rounded-full object-cover border-2 border-white/20"
-                      />
+                      <div
+                        className={`flex h-14 w-14 items-center justify-center rounded-full border-2 border-white/20 bg-gradient-to-br ${testimonial.avatar.gradient}`}
+                      >
+                        <span className="text-2xl">{testimonial.avatar.emoji}</span>
+                      </div>
                       <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 border-2 border-slate-900">
                         <Check className="h-3 w-3 text-white" />
-          </div>
-        </div>
+                      </div>
+                    </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-bold text-white">{testimonial.name}</h4>
@@ -1343,38 +899,32 @@ export default function LandingPage() {
                   after: "Got a job that requires Dutch fluency",
                   time: "6 months",
                   cost: "€0",
-                  photo: "/diverse-person-smiling.png",
+                  visual: { icon: "🚀", gradient: "from-emerald-500/25 to-cyan-500/25" },
                 },
                 {
                   title: "Made 15 International Friends",
                   before: "Lonely expat in new city",
                   after: "Weekly meetups with language partners",
                   benefit: "Social life + language skills",
-                  photo: "/serene-asian-woman.png",
+                  visual: { icon: "🤝", gradient: "from-purple-500/25 to-pink-500/25" },
                 },
                 {
                   title: "Career Boost",
                   before: "Monolingual",
                   after: "Promoted because of Spanish skills",
                   roi: "€10,000 salary increase",
-                  photo: "/professional-woman.png",
+                  visual: { icon: "💼", gradient: "from-amber-500/25 to-orange-500/25" },
                 },
               ].map((story, index) => (
                 <div
                   key={index}
                   className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-6 shadow-lg backdrop-blur transition-all hover:border-white/20 hover:shadow-xl"
                 >
-                  <div className="mb-4">
-                    <Image
-                      src={story.photo}
-                      alt={story.title}
-                      width={200}
-                      height={120}
-                      className="w-full h-32 rounded-2xl object-cover mb-4"
-                    />
-                    <h4 className="text-xl font-bold text-white mb-3">{story.title}</h4>
+                  <div className={`mb-4 flex h-32 w-full items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br ${story.visual.gradient}`}>
+                    <span className="text-4xl">{story.visual.icon}</span>
                   </div>
-                  
+                  <h4 className="text-xl font-bold text-white mb-3">{story.title}</h4>
+
                   <div className="space-y-3">
                     <div className="flex items-start gap-2">
                       <X className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
@@ -1413,23 +963,6 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
-
-          {/* Featured In */}
-          <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-8 md:p-12 backdrop-blur">
-            <p className="text-center text-sm font-semibold uppercase tracking-[0.3em] text-slate-400 mb-6">
-              As Featured In
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12 opacity-60 grayscale hover:opacity-100 hover:grayscale-0 transition-all">
-              {["TechCrunch", "Product Hunt", "The Next Web", "Mashable"].map((publication, index) => (
-                <div
-                  key={index}
-                  className="text-2xl font-bold text-white/80 hover:text-white transition-colors"
-                >
-                  {publication}
-              </div>
-              ))}
-              </div>
-            </div>
 
           {/* Trust Badges */}
           <div className="flex flex-wrap items-center justify-center gap-6">

@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, ArrowRight, Heart, MapPin, Zap } from "lucide-react"
 import { useSwipeable } from "react-swipeable"
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import ProfileCarousel from "@/components/profile-carousel"
 
 export interface ProfileLanguageCard {
   flag: string
@@ -61,6 +61,7 @@ export interface ProfileCardProfile {
   availabilityInfo?: ProfileAvailabilityInfo
   reviews?: ProfileReview[]
   totalReviews?: number
+  topics?: string[]
 }
 
 const SAMPLE_PROFILES: ProfileCardProfile[] = [
@@ -355,6 +356,7 @@ export function ProfileCard({
   const { toast } = useToast()
   const modalRef = useRef<HTMLDivElement | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const [carouselDirection, setCarouselDirection] = useState(0)
   const [currentIndex, setCurrentIndex] = useState(() => {
     if (profiles.length === 0) return 0
     return Math.min(Math.max(initialIndex, 0), profiles.length - 1)
@@ -462,6 +464,7 @@ export function ProfileCard({
     if (isAnimating || profiles.length === 0) return
     if (activeIndex === 0) {
       if (loopNavigation && profiles.length > 1) {
+        setCarouselDirection(-1)
         setIsAnimating(true)
         setCurrentIndex(profiles.length - 1)
         window.setTimeout(() => setIsAnimating(false), 320)
@@ -471,6 +474,7 @@ export function ProfileCard({
       }
         return
     }
+    setCarouselDirection(-1)
     setIsAnimating(true)
     setCurrentIndex((prev) => Math.max(prev - 1, 0))
     window.setTimeout(() => setIsAnimating(false), 320)
@@ -480,6 +484,7 @@ export function ProfileCard({
     if (isAnimating || profiles.length === 0) return
     if (activeIndex === profiles.length - 1) {
       if (loopNavigation && profiles.length > 1) {
+        setCarouselDirection(1)
       setIsAnimating(true)
         setCurrentIndex(0)
         window.setTimeout(() => setIsAnimating(false), 320)
@@ -489,6 +494,7 @@ export function ProfileCard({
       }
       return
     }
+    setCarouselDirection(1)
     setIsAnimating(true)
     setCurrentIndex((prev) => Math.min(prev + 1, profiles.length - 1))
     window.setTimeout(() => setIsAnimating(false), 320)
@@ -497,7 +503,8 @@ export function ProfileCard({
   const handleJumpToProfile = (index: number) => {
     if (isAnimating || index === activeIndex) return
     if (index < 0 || index >= profiles.length) return
-      setIsAnimating(true)
+    setCarouselDirection(index > activeIndex ? 1 : -1)
+    setIsAnimating(true)
     setCurrentIndex(index)
     window.setTimeout(() => setIsAnimating(false), 320)
   }
@@ -666,6 +673,7 @@ export function ProfileCard({
       if (profiles.length === 0) return
       const safeActiveIndex = Math.min(Math.max(currentIndex, 0), profiles.length - 1)
       if (safeActiveIndex < profiles.length - 1) {
+        setCarouselDirection(1)
         setIsAnimating(true)
         setCurrentIndex((prev) => Math.min(prev + 1, profiles.length - 1))
         window.setTimeout(() => setIsAnimating(false), 320)
@@ -677,6 +685,7 @@ export function ProfileCard({
       if (profiles.length === 0) return
       const safeActiveIndex = Math.min(Math.max(currentIndex, 0), profiles.length - 1)
       if (safeActiveIndex > 0) {
+        setCarouselDirection(-1)
         setIsAnimating(true)
         setCurrentIndex((prev) => Math.max(prev - 1, 0))
         window.setTimeout(() => setIsAnimating(false), 320)
@@ -693,13 +702,6 @@ export function ProfileCard({
         }, 400)
       }
       setVerticalOffset(0)
-    },
-    onSwiped: () => {
-      setSwipeDirection(null)
-      setSwipeOffset(0)
-      if (verticalOffset < 100) {
-        setVerticalOffset(0)
-      }
     },
     onSwiping: (event) => {
       const targetNode = (event.event?.target as Node | null) ?? null
@@ -730,6 +732,7 @@ export function ProfileCard({
       if (event.key === "ArrowLeft") {
         event.preventDefault()
         if (safeActiveIndex > 0) {
+          setCarouselDirection(-1)
           setIsAnimating(true)
           setCurrentIndex((prev) => Math.max(prev - 1, 0))
           window.setTimeout(() => setIsAnimating(false), 320)
@@ -737,6 +740,7 @@ export function ProfileCard({
       } else if (event.key === "ArrowRight") {
         event.preventDefault()
         if (safeActiveIndex < profiles.length - 1) {
+          setCarouselDirection(1)
           setIsAnimating(true)
           setCurrentIndex((prev) => Math.min(prev + 1, profiles.length - 1))
           window.setTimeout(() => setIsAnimating(false), 320)
@@ -804,9 +808,7 @@ export function ProfileCard({
   const isOnline = activeProfile.isOnline ?? true
 
   const ratingStat = stats.find((stat) => stat.label.toLowerCase() === "rating")
-  const ratingValue = ratingStat?.value ?? ""
-  const reviewCountLabel =
-    (activeProfile as any)?.reviewCount ?? (activeProfile.reviews ? activeProfile.reviews.length : undefined)
+  const rawRatingValue = ratingStat?.value ?? ""
   const distanceLabel = activeProfile.distance ?? "Nearby"
   const timeToMeetLabel = activeProfile.timeLeft || "Available now"
   const rawLocation =
@@ -832,10 +834,48 @@ export function ProfileCard({
     ? [rawLocation]
     : []
 
-  const cardBase =
-    "rounded-2xl border border-white/10 bg-[#2d2d2d]/95 shadow-[0_8px_26px_rgba(0,0,0,0.45)] transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(0,0,0,0.5)] p-5 sm:p-6"
-  const sectionTitle =
-    "text-xs font-semibold uppercase tracking-[0.3em] text-white/60 sm:text-sm flex items-center gap-2"
+  const primaryTeach = teaches[0]
+  const primaryLearn = learns[0]
+  const heroBadgeTitle =
+    primaryTeach && primaryLearn
+      ? `${primaryTeach.flag}→${primaryLearn.flag} LANGUAGE TRADE`
+      : languagePairLabel ?? "Language Trader"
+  const heroBadgeSubtitle =
+    primaryTeach && primaryLearn ? `${primaryTeach.language} for ${primaryLearn.language}` : undefined
+
+  const reviewCount = typeof activeProfile.totalReviews === "number" ? activeProfile.totalReviews : reviews.length
+  const hasReviews = reviewCount > 0
+  const ratingValue = hasReviews ? rawRatingValue || "4.8★" : ""
+  const ratingSummary = hasReviews
+    ? `Based on ${reviewCount} review${reviewCount === 1 ? "" : "s"}`
+    : "No reviews yet – be the first!"
+
+  const matchInsights = [
+    primaryTeach && primaryLearn
+      ? `You can share ${primaryTeach.language} while practicing ${primaryLearn.language} together`
+      : "Shared language interests",
+    scheduleItems[0] ? `Overlapping availability: ${scheduleItems[0]}` : "Matching availability windows",
+    locationItems[0] ? `Both enjoy ${locationItems[0]}` : "Both love cozy coffee shops",
+    availabilityInfo.subtitle ?? "Aligned proficiency goals",
+  ].filter(Boolean) as string[]
+
+  const tradesStat = stats.find((stat) => stat.label.toLowerCase().includes("trade"))?.value
+  const hoursStat = stats.find((stat) => stat.label.toLowerCase().includes("hour"))?.value
+  const streakStat = stats.find((stat) => stat.label.toLowerCase().includes("streak"))?.value
+
+  const achievementHighlights = [
+    tradesStat ? { icon: "🏆", text: `${tradesStat} trades completed` } : null,
+    ratingValue ? { icon: "⭐", text: `${ratingValue.replace(/★/g, "")} rated partner` } : null,
+    streakStat ? { icon: "🔥", text: `${streakStat} streak on the platform` } : null,
+    hoursStat ? { icon: "⏱", text: `${hoursStat} of practice logged` } : null,
+    { icon: "💎", text: "Verified & background checked" },
+  ].filter(Boolean) as Array<{ icon: string; text: string }>
+
+  const interestTags =
+    activeProfile.topics && activeProfile.topics.length > 0
+      ? activeProfile.topics
+      : ["Tech", "Business", "Travel", "Food", "Culture", "Movies", "Books", "Music"]
+
   const bodyText = "text-sm sm:text-base text-white/80"
 
   return (
@@ -856,14 +896,14 @@ export function ProfileCard({
         role="dialog"
         aria-modal="true"
         ref={modalRef}
-        className={`relative grid w-full max-w-6xl grid-rows-[auto,1fr] overflow-hidden rounded-[36px] border border-white/10 bg-[rgba(27,27,35,0.95)] shadow-[0_60px_180px_rgba(5,8,25,0.75)] backdrop-blur-[32px] transition-all duration-300 ease-out focus:outline-none lg:grid-cols-[360px,1fr] lg:grid-rows-[auto] lg:max-h-[88vh] ${
+        className={`relative flex w-full max-w-[720px] flex-col overflow-hidden rounded-[36px] border border-white/10 bg-[rgba(27,27,35,0.95)] shadow-[0_60px_180px_rgba(5,8,25,0.75)] backdrop-blur-[32px] transition-all duration-300 ease-out focus:outline-none lg:max-h-[88vh] ${
           isClosing ? "opacity-0" : "profile-card-enter"
         } ${showBoundaryFeedback === "left" ? "animate-bounce-left" : ""} ${showBoundaryFeedback === "right" ? "animate-bounce-right" : ""}`}
         style={{ transform: containerTransform, opacity: containerOpacity }}
       >
         <div className="absolute inset-0 rounded-[36px] bg-gradient-to-br from-white/5 via-transparent to-white/10 opacity-[0.18]" />
 
-        <div className="relative flex items-center justify-between px-6 pt-6 sm:px-8 sm:pt-8 lg:col-span-2 lg:sticky lg:top-0 lg:z-10 lg:bg-[rgba(27,27,35,0.95)] lg:backdrop-blur-[32px]">
+        <div className="relative flex items-center justify-between px-6 pt-6 sm:px-8 sm:pt-8 lg:sticky lg:top-0 lg:z-10 lg:bg-[rgba(27,27,35,0.95)] lg:backdrop-blur-[32px]">
           <Button
             size="icon"
             variant="ghost"
@@ -874,18 +914,9 @@ export function ProfileCard({
             <ArrowLeft className="h-4 w-4" />
           </Button>
 
-          <div className="flex flex-col items-center text-center">
-            <button
-              type="button"
-              onClick={handleAddNoteClick}
-              className="rounded-full border border-white/10 bg-[#2d2d35]/80 px-4 py-1 text-sm font-semibold text-white shadow-[0_12px_32px_rgba(10,10,20,0.4)] transition hover:bg-[#34343f]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5eead4]/60"
-            >
-              Add Note
-            </button>
-            <span className="mt-1 text-xs font-medium text-white/55">
-              {activeIndex + 1} / {profiles.length}
+          <span className="text-xs font-medium uppercase tracking-[0.3em] text-white/55">
+            {activeIndex + 1} / {profiles.length}
             </span>
-          </div>
 
           <div className="flex items-center gap-3">
             <Button
@@ -915,369 +946,321 @@ export function ProfileCard({
           tabIndex={0}
           className="relative flex-1 overflow-y-auto pt-2 focus:outline-none lg:max-h-[calc(88vh-96px)] lg:pt-4"
         >
-          <div className="mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6 md:px-8">
-            <div className="grid grid-cols-1 gap-12 text-white lg:grid-cols-[360px,1fr] lg:items-start lg:gap-16">
-              <div className="flex flex-col items-center text-center lg:sticky lg:top-24 lg:mt-4 lg:items-start lg:space-y-6 lg:text-left">
-                <div className="relative flex flex-col items-center lg:items-start">
-                  <div className="relative mb-10">
+          <div className="mx-auto w-full max-w-[520px] px-4 pb-12 sm:px-6 md:px-8">
+            <div className="flex flex-col items-center gap-12 text-white">
+              <ProfileCarousel
+                profiles={profiles}
+                activeIndex={activeIndex}
+                onNext={handleNext}
+                onPrev={handlePrevious}
+                onSelect={handleJumpToProfile}
+                direction={carouselDirection}
+                meta={{
+                  distanceLabel,
+                  timeToMeetLabel,
+                  ratingValue: ratingValue,
+                  reviewCountLabel: reviewCount,
+                  badgeTitle: heroBadgeTitle,
+                  badgeSubtitle: heroBadgeSubtitle,
+                  ratingSummary,
+                  isOnline,
+                }}
+              />
+
+              <section className="w-full space-y-5 rounded-[28px] border border-white/10 bg-[linear-gradient(145deg,rgba(18,22,32,0.88),rgba(12,15,24,0.92))] p-6 text-center shadow-[0_32px_70px_rgba(8,12,30,0.6)]">
+                <div className="flex flex-col items-center gap-2 text-sm text-white/70 sm:flex-row sm:justify-center sm:text-base">
+                  <span className="font-semibold text-white">@{activeProfile.username.replace(/^@/, "")}</span>
+                  <span className="hidden text-white/35 sm:inline">•</span>
+                  <span>{distanceLabel}</span>
+                  <span className="hidden text-white/35 sm:inline">•</span>
+                  <span className="text-[#00FF88]">{timeToMeetLabel}</span>
+            </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 text-xs uppercase tracking-[0.3em] text-white/45">
+                  <span>⭐ Rating</span>
+                  <span className="hidden text-white/30 sm:inline">|</span>
+                  <span>{ratingSummary}</span>
+          </div>
+              </section>
+
+              <section className="w-full space-y-6 rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_60px_rgba(6,10,24,0.55)] backdrop-blur-xl">
+                <div className="flex items-center gap-3 text-white">
+                  <span className="text-2xl">🎯</span>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-white/70 sm:text-base">Compatibility Match</h3>
+                </div>
+                <div className="rounded-2xl border border-white/12 bg-[#121620]/90 px-5 py-6 shadow-inner shadow-black/40">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xl font-semibold text-white sm:text-2xl">{compatibilityScore}% Excellent match!</p>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-200">
+                      {compatibilityLabel || "High compatibility"}
+          </span>
+        </div>
+                  <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-[#1f2435]">
                     <div
-                      className="absolute inset-0 rounded-full blur-3xl"
-                      style={{ background: "radial-gradient(circle, rgba(0,217,255,0.25) 0%, rgba(14,23,36,0.05) 65%)" }}
+                      className="h-full rounded-full bg-gradient-to-r from-[#00FF88] via-[#00E0AF] to-[#00D9FF]"
+                      style={{ width: `${compatibilityScore}%` }}
                     />
-                    <div className="relative flex h-32 w-32 items-center justify-center shadow-[0_16px_36px_rgba(8,14,45,0.55)]">
-                      <div
-                        className="absolute inset-0 rounded-full opacity-90"
-                        style={{ background: "linear-gradient(135deg, #00D9FF, #667EEA)" }}
-                      />
-                      <div className="absolute inset-[6px] rounded-full bg-[#13141d] p-[4px]">
-                        <div className="relative h-full w-full overflow-hidden rounded-full">
-                          {activeProfile.avatarUrl ? (
-                            <img
-                              src={activeProfile.avatarUrl}
-                              alt={activeProfile.displayName}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-700/40 to-slate-900/60 text-4xl font-semibold">
-                              {activeProfile.avatar ?? activeProfile.displayName.charAt(0)}
-                            </div>
-                          )}
-                        </div>
-                        {isOnline && (
-                          <span className="absolute -bottom-1.5 -right-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#11121c] bg-[#00FF88] shadow-[0_0_16px_rgba(0,255,136,0.75)]" />
-                        )}
+                  </div>
+                  <ul className="mt-5 space-y-2 text-sm text-white/75">
+                    {matchInsights.map((reason, index) => (
+                      <li key={`match-reason-${index}`} className="flex items-center gap-2">
+                        <span className="text-emerald-300">✅</span>
+                        <span>{reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-5 flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs uppercase tracking-[0.3em] text-emerald-200">
+              <Zap className="h-4 w-4" />
+                    This match refreshes in {timeToMeetLabel || "about 30 minutes"} — start a chat soon!
+                  </p>
+            </div>
+              </section>
+
+              <section className="w-full space-y-6 rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_60px_rgba(6,10,24,0.55)] backdrop-blur-xl">
+                <div className="flex items-center gap-3 text-white">
+                  <span className="text-2xl">📊</span>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-white/70 sm:text-base">Stats & Achievements</h3>
+                </div>
+                <div className="rounded-2xl border border-white/12 bg-[#151b27]/85 p-5">
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    {stats.map((stat, idx) => (
+                      <div key={`stat-${stat.label}-${idx}`} className="rounded-xl bg-[#232836] px-4 py-4 text-center shadow-inner shadow-black/20">
+                        <p className="text-2xl font-semibold text-white">{stat.value}</p>
+                        <p className="mt-2 text-[11px] uppercase tracking-[0.25em] text-white/55">{stat.label}</p>
                       </div>
-                    </div>
+                    ))}
+                  </div>
+                  <div className="mt-6 grid gap-3 text-sm text-white/80 sm:grid-cols-2">
+                    {achievementHighlights.map((item, index) => (
+                      <div key={`achieve-${index}`} className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3">
+                        <span className="text-lg">{item.icon}</span>
+                        <p>{item.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
 
-                    <div className="absolute inset-x-0 -bottom-9 flex justify-center lg:justify-start">
-                      <span className="flex items-center gap-2 rounded-full bg-[#2b2b36]/90 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-[#c7d3ff] shadow-[0_14px_36px_rgba(10,12,28,0.55)]">
-                        {languagePairLabel}
-                      </span>
+              <section className="w-full space-y-6 rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_60px_rgba(6,10,24,0.55)] backdrop-blur-xl">
+                <div className="flex items-center gap-3 text-white">
+                  <span className="text-2xl">🗣️</span>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-white/70 sm:text-base">Languages</h3>
+                </div>
+                <div className="space-y-6">
+                  <div className="rounded-2xl border border-white/10 bg-[#141924]/90 p-6 shadow-[0_20px_40px_rgba(8,14,35,0.45)]">
+                    <div className="mb-4 flex items-center justify-between text-white">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.25em] text-white/45">Can teach you</p>
+                        <h4 className="mt-2 text-lg font-semibold sm:text-xl">{primaryTeach?.flag} {primaryTeach?.language ?? "English"} (Native)</h4>
+                      </div>
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">100%</span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[#1d1f29]">
+                      <div className="h-full rounded-full bg-gradient-to-r from-[#00FF88] to-[#00D9FF]" style={{ width: "100%" }} />
+                    </div>
+                    <div className="mt-4 space-y-1 text-sm text-white/75">
+                      <p className="font-semibold text-white/85">💡 Specialties</p>
+                      <p>• Business English</p>
+                      <p>• Tech vocabulary</p>
+                      <p>• Pronunciation coaching</p>
                     </div>
                   </div>
 
-                  <div className="mt-6 text-xs font-semibold uppercase tracking-[0.35em] text-white/45">
-                    Handle
-                  </div>
-                  <div className="mt-1 text-sm text-white/65">{activeProfile.username}</div>
-                  <h2 className="mt-3 text-[28px] font-semibold text-white sm:text-[30px]">
-            {activeProfile.displayName}
-          </h2>
-                  <div className="mt-3 flex items-center gap-3 text-sm text-white/75 sm:text-base">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="h-4 w-4 text-white/60" />
-                      {distanceLabel}
-                    </span>
-                    <span className="text-white/40">•</span>
-                    <span className="flex items-center gap-1 text-[#00FF88]">
-                      <Zap className="h-4 w-4" />
-                      {timeToMeetLabel}
-                    </span>
-                  </div>
-                  {(ratingValue || typeof reviewCountLabel === "number") && (
-                    <div className="mt-5 flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-6 py-4 text-center text-sm text-white/80 lg:items-start">
-                      {ratingValue && (
-                        <span className="text-base font-semibold text-white">
-                          ⭐ {ratingValue}
-                        </span>
-                      )}
-                      {typeof reviewCountLabel === "number" && (
-                        <span className="text-xs uppercase tracking-[0.25em] text-white/45">
-                          Based on {reviewCountLabel} review{reviewCountLabel === 1 ? "" : "s"}
-                        </span>
-                      )}
+                  {primaryLearn && (
+                    <div className="rounded-2xl border border-[#5f67c5]/40 bg-[#181c31]/90 p-6 shadow-[0_20px_45px_rgba(8,14,35,0.4)]">
+                      <div className="mb-4 flex items-center justify-between text-white">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.25em] text-white/45">Wants to learn</p>
+                          <h4 className="mt-2 text-lg font-semibold sm:text-xl">{primaryLearn.flag} {primaryLearn.language} ({primaryLearn.level})</h4>
+                        </div>
+                        <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">{primaryLearn.progress ?? 65}%</span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-[#1d1f29]">
+                        <div className="h-full rounded-full bg-gradient-to-r from-[#667EEA] to-[#9F7AEA]" style={{ width: `${primaryLearn.progress ?? 65}%` }} />
+                      </div>
+                      <div className="mt-4 space-y-1 text-sm text-white/75">
+                        <p className="font-semibold text-white/85">🎯 Goals</p>
+                        <p>• Daily conversations</p>
+                        <p>• Work situations</p>
+                        <p>• Dutch culture & idioms</p>
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
+              </section>
 
-              </div>
-              <div className="flex w-full flex-col gap-10 text-left lg:pr-3">
-                <section>
-                  <h3 className={sectionTitle}>📊 STATS</h3>
-                  <div className={`${cardBase} mt-4`}>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      {stats.map((stat, idx) => (
-                        <div
-                          key={`stat-${stat.label}-${idx}`}
-                          className="rounded-xl bg-[#3a3a3a]/85 px-4 py-4 text-center shadow-inner shadow-black/20"
-                        >
-                          <p className="text-2xl font-semibold text-white">{stat.value}</p>
-                          <p className="mt-1 text-[11px] uppercase tracking-[0.25em] text-white/55">
-                            {stat.label}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
+              {activeProfile.description && (
+                <section className="w-full space-y-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-6 text-left shadow-[0_30px_60px_rgba(6,10,24,0.55)] backdrop-blur-xl">
+                  <div className="flex items-center gap-3 text-white">
+                    <span className="text-2xl">👋</span>
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-white/70 sm:text-base">About me</h3>
                   </div>
+                  <p className="text-base leading-relaxed text-white/80">“{activeProfile.description}”</p>
                 </section>
+              )}
 
-                <section>
-                  <h3 className={sectionTitle}>🎯 MATCH SCORE</h3>
-                  <div className={`${cardBase} mt-4 space-y-4`}>
-                    <div className="flex flex-wrap items-center justify-between gap-3 text-white">
-                      <span className="text-xl font-semibold sm:text-2xl">
-                        {compatibilityScore}% compatibility
-                      </span>
-                      <span className="text-sm font-semibold text-[#5eead4]">
-                        {compatibilityLabel}
-                      </span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-[#3a3a3a]">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-[#00FF88] via-[#00f0cc] to-[#00D9FF]"
-                        style={{ width: `${compatibilityScore}%` }}
-                      />
-                    </div>
-                    <p className="text-xs uppercase tracking-[0.25em] text-white/45">
-                      {timeToMeetLabel}
+              <section className="w-full space-y-6 rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_60px_rgba(6,10,24,0.55)] backdrop-blur-xl">
+                <div className="flex items-center gap-3 text-white">
+                  <span className="text-2xl">⏰</span>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-white/70 sm:text-base">Availability & schedule</h3>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-[#151b27]/90 p-5 text-sm text-white/80 shadow-inner shadow-black/40">
+                  <p className="text-xs uppercase tracking-[0.25em] text-white/40">Currently</p>
+                  <p className="mt-2 flex items-center gap-2 text-base font-semibold text-[#00FF88]">
+                    <Zap className="h-4 w-4" />
+                    {availabilityInfo.headline}
+                  </p>
+                  {availabilityInfo.subtitle && <p className="mt-1 text-white/70">{availabilityInfo.subtitle}</p>}
+                  {availabilityInfo.schedule && <p className="mt-1 text-white/60">{availabilityInfo.schedule}</p>}
+                  {availabilityInfo.locations && <p className="mt-1 text-white/60">{availabilityInfo.locations}</p>}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-white/10 bg-[#141924]/90 px-4 py-4 text-center">
+                    <p className="text-xs uppercase tracking-[0.25em] text-white/45">Session length</p>
+                    <p className="mt-2 text-base font-semibold text-white">{timeToMeetLabel || "30 minutes"}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#141924]/90 px-4 py-4 text-center">
+                    <p className="text-xs uppercase tracking-[0.25em] text-white/45">Best time</p>
+                    <p className="mt-2 text-base font-semibold text-white">{scheduleItems[0] ?? "Evenings (6pm-9pm)"}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#141924]/90 px-4 py-4 text-center">
+                    <p className="text-xs uppercase tracking-[0.25em] text-white/45">Preferred spot</p>
+                    <p className="mt-2 text-base font-semibold text-white">{locationItems[0] ?? "Coffee shops"}</p>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-[#151a24]/85 px-5 py-4 text-sm text-white/78">
+                  <p className="font-semibold text-white/85">🗓️ Weekly rhythm</p>
+                  <p className="mt-2 text-white/70">Mon-Fri: Evenings (6pm-9pm)</p>
+                  <p className="text-white/70">Weekends: Mornings & afternoons</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-[#151a24]/85 px-5 py-4 text-sm text-white/78">
+                  <p className="font-semibold text-white/85">☕ Favorite spots</p>
+                  {(locationItems.length ? locationItems : ["Starbucks Centrum", "Public Library", "City Park"]).slice(0, 3).map((place, idx) => (
+                    <p key={`fav-spot-${idx}`} className="text-white/70">
+                      • {place}
                     </p>
-                  </div>
-                </section>
+                  ))}
+                </div>
+              </section>
 
-                <section>
-                  <h3 className={sectionTitle}>🗣️ LANGUAGES</h3>
-                  <div className={`${cardBase} mt-4 space-y-8`}>
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.25em] text-white/45">Can teach</p>
-                      <div className="mt-3 space-y-4">
-                        {teaches.map((card, idx) => (
-                          <div
-                            key={`teach-${card.language}-${idx}`}
-                            className="rounded-2xl border border-white/10 bg-[#3a3a3a]/90 p-5"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-3xl">{card.flag}</span>
-                              <div className="flex-1">
-                                <p className="text-lg font-semibold text-white sm:text-xl">
-                                  {card.language}
-                                </p>
-                                <p className="text-xs uppercase tracking-[0.2em] text-white/55">
-                                  {card.level}
-                                </p>
-                              </div>
-                              <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
-                                Native
-          </span>
-                            </div>
-                            <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-[#1d1d25]">
-                              <div
-                                className="h-full rounded-full bg-gradient-to-r from-[#00FF88] to-[#00D9FF]"
-                                style={{ width: `${card.progress ?? 100}%` }}
-                              />
-                            </div>
-                            {card.description && (
-                              <p className="mt-4 text-sm text-white/70">“{card.description}”</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+              <section className="w-full space-y-6 rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_60px_rgba(6,10,24,0.55)] backdrop-blur-xl">
+                <div className="flex items-center gap-3 text-white">
+                  <span className="text-2xl">⭐</span>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-white/70 sm:text-base">Recent reviews</h3>
+                </div>
+                <div className="space-y-4">
+                  {hasReviews ? (
+                    reviews.slice(0, 3).map((review, idx) => (
+                      <div key={`review-${idx}`} className="rounded-2xl border border-[#FFD700]/40 bg-[#2d2d37]/95 px-5 py-4 text-sm text-white/80 shadow-[0_20px_45px_rgba(10,10,28,0.45)]">
+                        <div className="flex items-center gap-1 text-[#FFD700]">
+                          {Array.from({ length: review.stars }).map((_, starIdx) => (
+                            <span key={`review-${idx}-star-${starIdx}`} className="text-base leading-none">
+                              ★
+              </span>
+                          ))}
+            </div>
+                        <p className="mt-3 text-sm text-white">{review.text}</p>
+                        <p className="mt-3 text-xs text-white/55">— {review.author}</p>
+          </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-white/10 bg-[#242430]/90 px-5 py-6 text-center text-sm text-white/75">
+                      <span className="text-2xl">🌟</span>
+                      <p className="mt-2 text-base font-semibold text-white">No reviews yet</p>
+                      <p className="mt-2 text-sm text-white/70">
+                        Be the first to practice with {activeProfile.displayName.split(" ")[0] ?? activeProfile.displayName}! Every great partnership starts with a first session.
+                      </p>
+                      <Button
+                        className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00FF88] to-[#00D9FF] text-base font-semibold text-slate-900 shadow-[0_14px_45px_rgba(0,255,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(0,255,136,0.45)]"
+                        onClick={handleAskToMatchClick}
+                      >
+                        🤝 Start first session
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {hasReviews && totalReviews > reviews.length && (
+                  <button type="button" className="text-sm font-semibold text-[#667EEA] underline-offset-4 hover:underline sm:text-base">
+                    View all {totalReviews} reviews →
+                  </button>
+                )}
+              </section>
+
+              <section className="w-full space-y-6 rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_60px_rgba(6,10,24,0.55)] backdrop-blur-xl">
+                <div className="flex items-center gap-3 text-white">
+                  <span className="text-2xl">🎖️</span>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-white/70 sm:text-base">Badges & highlights</h3>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[{ icon: "🏆", text: "Top 5% in Den Haag" }, { icon: "⭐", text: "5-Star Teacher" }, { icon: "🔥", text: "30-day streak" }, { icon: "💯", text: "100+ conversations" }].map((item, index) => (
+                    <div key={`highlight-${index}`} className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#181d2a]/90 px-4 py-4 text-sm text-white/80">
+                      <span className="text-lg">{item.icon}</span>
+                      <p>{item.text}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="w-full space-y-4 rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_60px_rgba(6,10,24,0.55)] backdrop-blur-xl">
+                <div className="flex items-center gap-3 text-white">
+                  <span className="text-2xl">💬</span>
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.35em] text-white/70 sm:text-base">Common topics</h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {interestTags.map((topic, idx) => (
+                    <span key={`topic-${idx}`} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                      #{topic}
+                    </span>
+                  ))}
+                </div>
+              </section>
+
+              <div className="w-full space-y-6 rounded-[28px] border border-white/10 bg-white/[0.06] p-6 shadow-[0_30px_60px_rgba(6,10,24,0.55)] backdrop-blur-xl">
+                <div className="space-y-3 sm:space-y-4">
+            <Button
+                    onClick={handleAskToMatchClick}
+                    disabled={isMatchPending}
+                    className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#00FF88] via-[#00E0AF] to-[#00D9FF] text-base sm:text-lg md:text-xl font-semibold text-slate-900 shadow-[0_14px_45px_rgba(0,255,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(0,255,136,0.45)] disabled:translate-y-0 disabled:opacity-60"
+                  >
+                    <span className="text-xl">🤝</span>
+                    <span>{isMatchPending ? "PROPOSING TRADE..." : "PROPOSE LANGUAGE TRADE"}</span>
+            </Button>
+            <Button
+                    onClick={handleSendMessageClick}
+                    disabled={isMessagePending}
+                    className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#667EEA] text-base sm:text-lg md:text-xl font-semibold text-white shadow-[0_14px_45px_rgba(102,126,234,0.4)] transition hover:-translate-y-0.5 hover:bg-[#7b8dff] disabled:translate-y-0 disabled:opacity-60"
+                  >
+                    <span className="text-xl">💬</span>
+                    <span>{isMessagePending ? "OPENING CHAT..." : "START CONVERSATION"}</span>
+            </Button>
+            <Button
+                    variant="outline"
+                    onClick={handleInviteToEventClick}
+                    disabled={isInvitePending}
+                    className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl border-2 border-white/20 bg-transparent text-base sm:text-lg md:text-xl font-semibold text-white transition hover:-translate-y-0.5 hover:border-white/40 hover:shadow-[0_18px_50px_rgba(102,126,234,0.35)] disabled:translate-y-0 disabled:opacity-60"
+                  >
+                    <span className="text-xl">🎉</span>
+                    <span>{isInvitePending ? "SENDING INVITE..." : "INVITE TO PRACTICE EVENT"}</span>
+                  </Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Button variant="outline" className="flex h-12 items-center justify-center gap-3 rounded-xl border border-white/20 bg-transparent text-sm sm:text-base font-semibold text-white/75 transition hover:-translate-y-0.5 hover:border-white/40 hover:text-white">
+                    <span className="text-lg">⭐</span>
+                    SAVE PROFILE
+                  </Button>
+                  <Button variant="outline" className="flex h-12 items-center justify-center gap-3 rounded-xl border border-white/20 bg-transparent text-sm sm:text-base font-semibold text-white/75 transition hover:-translate-y-0.5 hover:border-white/40 hover:text-white">
+                    <span className="text-lg">📤</span>
+                    SHARE PROFILE
+            </Button>
+          </div>
         </div>
 
-                    {learns.length > 0 && (
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.25em] text-white/45">Wants to learn</p>
-                        <div className="mt-3 space-y-4">
-                          {learns.map((card, idx) => (
-                            <div
-                              key={`learn-${card.language}-${idx}`}
-                              className="rounded-2xl border border-white/10 bg-[#2e2e48]/90 p-5"
-                            >
-                              <div className="flex items-center gap-3">
-                                <span className="text-3xl">{card.flag}</span>
-                                <div className="flex-1">
-                                  <p className="text-lg font-semibold text-white sm:text-xl">
-                                    {card.language}
-                                  </p>
-                                  <p className="text-xs uppercase tracking-[0.2em] text-white/55">
-                                    {card.level}
-                                  </p>
-                                </div>
-                                <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
-                                  Learning
-                                </span>
-                              </div>
-                              <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-[#1e1f2d]">
-                                <div
-                                  className="h-full rounded-full bg-gradient-to-r from-[#667EEA] to-[#9F7AEA]"
-                                  style={{ width: `${card.progress ?? 55}%` }}
-                                />
-                              </div>
-                              {card.description && (
-                                <p className="mt-4 text-sm text-white/70">“{card.description}”</p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </section>
-
-                {activeProfile.description && (
-                  <section>
-                    <h3 className={sectionTitle}>💬 ABOUT</h3>
-                    <div className={`${cardBase} mt-4`}>
-                      <p className="text-base leading-relaxed text-white/80">
-                        “{activeProfile.description}”
-                      </p>
-                    </div>
-                  </section>
-                )}
-
-                <section>
-                  <h3 className={sectionTitle}>📍 LOCATION & AVAILABILITY</h3>
-                  <div className={`${cardBase} mt-4 space-y-4`}>
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">
-                        <p className="text-xs uppercase tracking-[0.25em] text-white/40">Distance</p>
-                        <p className="mt-2 text-base font-semibold text-white">{distanceLabel}</p>
-                      </div>
-                      <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">
-                        <p className="text-xs uppercase tracking-[0.25em] text-white/40">Time to meet</p>
-                        <p className="mt-2 text-base font-semibold text-[#00FF88]">{timeToMeetLabel}</p>
-                      </div>
-                      <div className="rounded-xl bg-white/5 px-4 py-3 text-sm text-white/80">
-                        <p className="text-xs uppercase tracking-[0.25em] text-white/40">City</p>
-                        <p className="mt-2 text-base font-semibold text-white">
-                          {locationItems[0] ?? "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-[#1f1f29]/80 px-5 py-4 text-sm text-white/80">
-                      <p className="text-xs uppercase tracking-[0.25em] text-white/40">Status</p>
-                      <p className="mt-2 flex items-center gap-2 text-base font-semibold text-[#00FF88]">
-              <Zap className="h-4 w-4" />
-                        {availabilityInfo.headline}
-                      </p>
-                      {availabilityInfo.subtitle && (
-                        <p className="mt-1 text-sm text-white/70">{availabilityInfo.subtitle}</p>
-                      )}
-            </div>
-                  </div>
-                </section>
-
-                <section>
-                  <h3 className={sectionTitle}>🗓️ SCHEDULE</h3>
-                  <div className={`${cardBase} mt-4 space-y-5`}>
-                    {scheduleItems.length > 0 && (
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.25em] text-white/40">Usually active</p>
-                        <ul className="mt-3 space-y-2 text-sm text-white/75">
-                          {scheduleItems.map((item, idx) => (
-                            <li key={`schedule-${idx}`} className="flex items-center gap-2">
-                              <span className="text-xs text-white/35">•</span>
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {locationItems.length > 0 && (
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.25em] text-white/40">Preferred locations</p>
-                        <ul className="mt-3 space-y-2 text-sm text-white/75">
-                          {locationItems.map((item, idx) => (
-                            <li key={`pref-${idx}`} className="flex items-center gap-2">
-                              <span className="text-xs text-white/35">•</span>
-                              <span>{item}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </section>
-
-                <section>
-                  <h3 className={sectionTitle}>💬 REVIEWS</h3>
-                  <div className={`${cardBase} mt-4 space-y-4`}>
-                    {reviews.length > 0 ? (
-                      reviews.map((review, idx) => (
-                        <div
-                          key={`review-${idx}`}
-                          className="rounded-2xl border border-[#FFD700]/40 bg-[#2d2d37]/95 px-5 py-4 text-sm text-white/80"
-                        >
-                          <div className="flex items-center gap-1 text-[#FFD700]">
-                            {Array.from({ length: review.stars }).map((_, starIdx) => (
-                              <span key={`star-${starIdx}`} className="text-base leading-none">
-                                ★
-              </span>
-                            ))}
-            </div>
-                          <p className="mt-3 text-sm text-white">{review.text}</p>
-                          <p className="mt-3 text-xs text-white/55">{review.author}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-2xl border border-white/10 bg-[#242430]/85 px-5 py-6 text-center text-sm text-white/70">
-                        No reviews yet. Start the first conversation!
-                        <p className="mt-3 text-xs text-white/45">
-                          Be the first to practice with {activeProfile.displayName.split(" ")[0] ?? activeProfile.displayName}.
-                        </p>
-                      </div>
-                    )}
-                    {totalReviews > reviews.length && (
-                      <button
-                        type="button"
-                        className="text-sm font-semibold text-[#667EEA] underline-offset-4 hover:underline sm:text-base"
-                      >
-                        View all {totalReviews} reviews →
-                      </button>
-                    )}
-                  </div>
-                </section>
-          </div>
-
-            <div className="mt-10 space-y-6">
-              <div className="space-y-3 sm:space-y-4">
-                <Button
-                  onClick={handleAskToMatchClick}
-                  disabled={isMatchPending}
-                  className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#00FF88] via-[#00E0AF] to-[#00D9FF] text-base sm:text-lg md:text-xl font-semibold text-slate-900 shadow-[0_14px_45px_rgba(0,255,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(0,255,136,0.45)] disabled:translate-y-0 disabled:opacity-60"
-                >
-                  <span className="text-xl">🤝</span>
-                  <span>{isMatchPending ? "PROPOSING TRADE..." : "PROPOSE LANGUAGE TRADE"}</span>
-                </Button>
-                <Button
-                  onClick={handleSendMessageClick}
-                  disabled={isMessagePending}
-                  className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#667EEA] text-base sm:text-lg md:text-xl font-semibold text-white shadow-[0_14px_45px_rgba(102,126,234,0.4)] transition hover:-translate-y-0.5 hover:bg-[#7b8dff] disabled:translate-y-0 disabled:opacity-60"
-                >
-                  <span className="text-xl">💬</span>
-                  <span>{isMessagePending ? "OPENING CHAT..." : "START CONVERSATION"}</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleInviteToEventClick}
-                  disabled={isInvitePending}
-                  className="flex h-14 w-full items-center justify-center gap-3 rounded-2xl border-2 border-white/20 bg-transparent text-base sm:text-lg md:text-xl font-semibold text-white transition hover:-translate-y-0.5 hover:border-white/40 hover:shadow-[0_18px_50px_rgba(102,126,234,0.35)] disabled:translate-y-0 disabled:opacity-60"
-                >
-                  <span className="text-xl">🎉</span>
-                  <span>{isInvitePending ? "SENDING INVITE..." : "INVITE TO PRACTICE EVENT"}</span>
-                </Button>
+              <div className="w-full rounded-[24px] border border-white/15 bg-white/[0.05] px-6 py-4 text-center text-sm text-white/75 shadow-[0_20px_45px_rgba(8,12,28,0.45)]">
+                <div className="flex items-center justify-center gap-3 text-xs sm:text-sm text-white/70">
+                  <span className="animate-pulse">⬅️ ⬅️ ⬅️</span>
+                  <span>Swipe to explore other profiles • Drag down to close</span>
+                  <span className="animate-pulse">➡️ ➡️ ➡️</span>
+                </div>
               </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Button
-                  variant="outline"
-                  className="flex h-12 items-center justify-center gap-3 rounded-xl border border-white/20 bg-transparent text-sm sm:text-base font-semibold text-white/75 transition hover:-translate-y-0.5 hover:border-white/40 hover:text-white"
-                >
-                  <span className="text-lg">⭐</span>
-                  SAVE
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex h-12 items-center justify-center gap-3 rounded-xl border border-white/20 bg-transparent text-sm sm:text-base font-semibold text-white/75 transition hover:-translate-y-0.5 hover:border-white/40 hover:text-white"
-                >
-                  <span className="text-lg">📤</span>
-                  SHARE PROFILE
-                </Button>
-              </div>
-
-              <p className="text-center text-xs sm:text-sm text-white/55">
-                Swipe sideways to peek other profiles • Drag down to close
-              </p>
             </div>
           </div>
 
