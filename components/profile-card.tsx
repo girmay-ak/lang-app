@@ -409,12 +409,9 @@ export function ProfileCard({
     }
   }, [currentIndex, profiles, onActiveIndexChange])
 
-  if (profiles.length === 0) {
-    return null
-  }
-
-  const activeIndex = Math.min(Math.max(currentIndex, 0), profiles.length - 1)
-  const activeProfile = profiles[activeIndex]
+  // Compute activeIndex and activeProfile safely (before hooks)
+  const activeIndex = profiles.length > 0 ? Math.min(Math.max(currentIndex, 0), profiles.length - 1) : 0
+  const activeProfile = profiles[activeIndex] ?? profiles[0]
 
   const handlePrevious = () => {
     if (isAnimating || profiles.length === 0) return
@@ -590,49 +587,65 @@ export function ProfileCard({
     })
   }
 
-  const isFavorited = favorites.has(activeProfile.id)
-
+  // All hooks must be called before any early returns
   const adjacentProfiles = useMemo(() => {
     if (!profiles.length) return []
+    const safeActiveIndex = Math.min(Math.max(currentIndex, 0), profiles.length - 1)
     return [1, 2].flatMap((offset) => {
       const items: Array<{ profile: ProfileCardProfile; index: number; side: "left" | "right"; offset: number }> = []
 
-      if (loopNavigation || activeIndex - offset >= 0) {
+      if (loopNavigation || safeActiveIndex - offset >= 0) {
         const leftIndex = loopNavigation
-          ? (activeIndex - offset + profiles.length) % profiles.length
-          : activeIndex - offset
-        if (leftIndex !== activeIndex && leftIndex >= 0 && leftIndex < profiles.length) {
+          ? (safeActiveIndex - offset + profiles.length) % profiles.length
+          : safeActiveIndex - offset
+        if (leftIndex !== safeActiveIndex && leftIndex >= 0 && leftIndex < profiles.length) {
           items.push({ profile: profiles[leftIndex], index: leftIndex, side: "left", offset })
         }
       }
 
-      if (loopNavigation || activeIndex + offset < profiles.length) {
+      if (loopNavigation || safeActiveIndex + offset < profiles.length) {
         const rightIndex = loopNavigation
-          ? (activeIndex + offset) % profiles.length
-          : activeIndex + offset
-        if (rightIndex !== activeIndex && rightIndex >= 0 && rightIndex < profiles.length) {
+          ? (safeActiveIndex + offset) % profiles.length
+          : safeActiveIndex + offset
+        if (rightIndex !== safeActiveIndex && rightIndex >= 0 && rightIndex < profiles.length) {
           items.push({ profile: profiles[rightIndex], index: rightIndex, side: "right", offset })
         }
       }
 
       return items
     })
-  }, [activeIndex, profiles, loopNavigation])
+  }, [currentIndex, profiles, loopNavigation])
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
-      handleNext()
+      if (profiles.length === 0) return
+      const safeActiveIndex = Math.min(Math.max(currentIndex, 0), profiles.length - 1)
+      if (safeActiveIndex < profiles.length - 1) {
+        setIsAnimating(true)
+        setCurrentIndex((prev) => Math.min(prev + 1, profiles.length - 1))
+        window.setTimeout(() => setIsAnimating(false), 320)
+      }
       setSwipeDirection(null)
       setSwipeOffset(0)
     },
     onSwipedRight: () => {
-      handlePrevious()
+      if (profiles.length === 0) return
+      const safeActiveIndex = Math.min(Math.max(currentIndex, 0), profiles.length - 1)
+      if (safeActiveIndex > 0) {
+        setIsAnimating(true)
+        setCurrentIndex((prev) => Math.max(prev - 1, 0))
+        window.setTimeout(() => setIsAnimating(false), 320)
+      }
       setSwipeDirection(null)
       setSwipeOffset(0)
     },
     onSwipedDown: () => {
-      if (verticalOffset > 100) {
-        handleClose()
+      if (verticalOffset > 100 && onClose) {
+        setIsClosing(true)
+        window.setTimeout(() => {
+          onClose()
+          setIsClosing(false)
+        }, 400)
       }
       setVerticalOffset(0)
     },
@@ -661,21 +674,42 @@ export function ProfileCard({
   })
 
   useEffect(() => {
+    if (profiles.length === 0) return
     const handleKeyDown = (event: KeyboardEvent) => {
+      const safeActiveIndex = Math.min(Math.max(currentIndex, 0), profiles.length - 1)
       if (event.key === "ArrowLeft") {
         event.preventDefault()
-        handlePrevious()
+        if (safeActiveIndex > 0) {
+          setIsAnimating(true)
+          setCurrentIndex((prev) => Math.max(prev - 1, 0))
+          window.setTimeout(() => setIsAnimating(false), 320)
+        }
       } else if (event.key === "ArrowRight") {
         event.preventDefault()
-        handleNext()
-      } else if (event.key === "Escape") {
+        if (safeActiveIndex < profiles.length - 1) {
+          setIsAnimating(true)
+          setCurrentIndex((prev) => Math.min(prev + 1, profiles.length - 1))
+          window.setTimeout(() => setIsAnimating(false), 320)
+        }
+      } else if (event.key === "Escape" && onClose) {
         event.preventDefault()
-        handleClose()
+        setIsClosing(true)
+        window.setTimeout(() => {
+          onClose()
+          setIsClosing(false)
+        }, 400)
       }
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  })
+  }, [currentIndex, profiles, onClose])
+
+  // Early return after all hooks
+  if (profiles.length === 0) {
+    return null
+  }
+
+  const isFavorited = favorites.has(activeProfile.id)
 
   const containerTransform = isClosing
     ? "translateY(100vh) scale(0.9)"

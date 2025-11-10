@@ -339,31 +339,21 @@ export function MapboxMap({
   )
 
   const flushPendingUnmounts = useCallback(() => {
-    const roots = pendingUnmountsRef.current.slice()
-    pendingUnmountsRef.current = []
-
+    const roots = pendingUnmountsRef.current.splice(0)
     if (roots.length === 0) {
       isUnmountFlushScheduledRef.current = false
       return
     }
 
-    const performUnmounts = () => {
-      roots.forEach((root) => {
-        try {
-          root.unmount()
-        } catch (error) {
-          console.warn("[MapboxMap] Failed to unmount marker root:", error)
-        }
-      })
-      isUnmountFlushScheduledRef.current = false
-    }
+    roots.forEach((root) => {
+      try {
+        root.unmount()
+      } catch (error) {
+        console.warn("[MapboxMap] Failed to unmount marker root:", error)
+      }
+    })
 
-    if (typeof window !== "undefined" && "requestAnimationFrame" in window) {
-      window.requestAnimationFrame(() => performUnmounts())
-      return
-    }
-
-    setTimeout(performUnmounts, 0)
+    isUnmountFlushScheduledRef.current = false
   }, [])
 
   const schedulePendingUnmountFlush = useCallback(() => {
@@ -371,19 +361,14 @@ export function MapboxMap({
     isUnmountFlushScheduledRef.current = true
 
     const schedule = () => {
-      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-        ;(window as any).requestIdleCallback(() => flushPendingUnmounts())
-        return
+      if (typeof window !== "undefined" && "requestAnimationFrame" in window) {
+        window.requestAnimationFrame(() => flushPendingUnmounts())
+      } else {
+        setTimeout(() => flushPendingUnmounts(), 0)
       }
-
-      setTimeout(() => flushPendingUnmounts(), 0)
     }
 
-    if (typeof Promise !== "undefined") {
-      Promise.resolve().then(schedule).catch(() => schedule())
-    } else {
-      schedule()
-    }
+    setTimeout(schedule, 0)
   }, [flushPendingUnmounts])
 
   const clearMarkers = useCallback(() => {

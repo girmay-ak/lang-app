@@ -59,12 +59,12 @@ export function ProfileView() {
   const [error, setError] = useState<string | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
 
   useEffect(() => {
     async function fetchUserData() {
       try {
         setIsLoading(true)
+        const supabase = createClient()
 
         const {
           data: { session },
@@ -113,6 +113,7 @@ export function ProfileView() {
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true)
+      const supabase = createClient()
       const { error: signOutError } = await supabase.auth.signOut()
       if (signOutError) throw signOutError
       localStorage.removeItem("onboarding_completed")

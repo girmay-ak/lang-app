@@ -736,10 +736,12 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     }
   }, [])
 
-  const effectiveUserLocation = userLocation ?? {
-    lat: FALLBACK_CITY_CENTER.latitude,
-    lng: FALLBACK_CITY_CENTER.longitude,
-  }
+  const effectiveUserLocation = useMemo(() => {
+    return userLocation ?? {
+      lat: FALLBACK_CITY_CENTER.latitude,
+      lng: FALLBACK_CITY_CENTER.longitude,
+    }
+  }, [userLocation])
   const nearbyCount = nearbyUsers.length
   const displayCity = currentCity ?? "Den Haag"
   const mapPreviewUrl = useMemo(() => {
