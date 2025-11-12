@@ -881,14 +881,9 @@ export function ProfileCard({
   return (
     <div
       className="fixed inset-0 z-[2600] flex min-h-screen items-start justify-center overflow-y-auto px-4 py-8 sm:py-10 lg:items-center"
-      style={{ background: "hsla(var(--profile-bg),0.92)", backdropFilter: "blur(24px)", touchAction: "pan-y", ...PROFILE_TOKENS }}
+      style={{ touchAction: "pan-y", ...PROFILE_TOKENS }}
       onClick={handleClose}
     >
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: "radial-gradient(circle, hsla(var(--glow-cyan),0.22), transparent 70%)", filter: "blur(80px)" }} />
-        <div className="absolute bottom-1/4 right-1/4 h-96 w-96 translate-x-1/2 translate-y-1/2 rounded-full" style={{ background: "radial-gradient(circle, hsla(var(--glow-purple),0.22), transparent 70%)", filter: "blur(110px)" }} />
-      </div>
-
       <div
         {...swipeHandlers}
         onClick={(event) => event.stopPropagation()}
@@ -896,14 +891,13 @@ export function ProfileCard({
         role="dialog"
         aria-modal="true"
         ref={modalRef}
-        className={`relative flex w-full max-w-[720px] flex-col overflow-hidden rounded-[36px] border border-white/10 bg-[rgba(27,27,35,0.95)] shadow-[0_60px_180px_rgba(5,8,25,0.75)] backdrop-blur-[32px] transition-all duration-300 ease-out focus:outline-none lg:max-h-[88vh] ${
+        className={`relative flex w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all duration-300 ease-out focus:outline-none lg:max-h-[88vh] ${
           isClosing ? "opacity-0" : "profile-card-enter"
         } ${showBoundaryFeedback === "left" ? "animate-bounce-left" : ""} ${showBoundaryFeedback === "right" ? "animate-bounce-right" : ""}`}
         style={{ transform: containerTransform, opacity: containerOpacity }}
       >
-        <div className="absolute inset-0 rounded-[36px] bg-gradient-to-br from-white/5 via-transparent to-white/10 opacity-[0.18]" />
 
-        <div className="relative flex items-center justify-between px-6 pt-6 sm:px-8 sm:pt-8 lg:sticky lg:top-0 lg:z-10 lg:bg-[rgba(27,27,35,0.95)] lg:backdrop-blur-[32px]">
+        <div className="relative flex items-center justify-between rounded-t-2xl border-b border-white/8 bg-[rgba(20,20,30,0.6)] px-6 pt-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] sm:px-8 sm:pt-8 lg:sticky lg:top-0 lg:z-10">
           <Button
             size="icon"
             variant="ghost"

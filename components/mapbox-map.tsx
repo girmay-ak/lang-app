@@ -66,6 +66,8 @@ interface MapboxMapProps {
   onPoiClick?: (poi: MapPoi) => void
   currentUserLocation?: { lat: number; lng: number } | null
   showCurrentUserRadar?: boolean
+  centerOffset?: { x: number; y: number }
+  onMapReady?: (map: any) => void
 }
 
 type MarkerEntry = {
@@ -122,6 +124,12 @@ function UserMarker({ user, onSelect }: { user: User; onSelect: () => void }) {
           </div>
         )}
         <div className="relative h-16 w-16">
+          {/* Glow ring - purple for viewer, soft white/blue for others */}
+          {user.isViewer ? (
+            <div className="absolute -inset-2 rounded-full bg-gradient-to-r from-purple-500/60 to-purple-600/60 blur-md animate-pulse" style={{ boxShadow: "0 0 12px rgba(155,93,245,0.6)" }} />
+          ) : (
+            <div className="absolute -inset-1 rounded-full bg-white/20 blur-sm" style={{ boxShadow: "0 0 8px rgba(255,255,255,0.3)" }} />
+          )}
           <div
             className="absolute inset-0 rounded-full shadow-[0_12px_28px_rgba(8,12,32,0.35)]"
             style={{ background: `linear-gradient(135deg, ${levelGradient.from}, ${levelGradient.to})` }}
@@ -229,6 +237,8 @@ export function MapboxMap({
   onPoiClick,
   currentUserLocation,
   showCurrentUserRadar = true,
+  centerOffset,
+  onMapReady,
 }: MapboxMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
@@ -492,6 +502,11 @@ export function MapboxMap({
 
             add3DBuildings(map, "standard")
             renderAllMarkers(map, mapboxgl, users, pois)
+            
+            // Expose map instance to parent
+            if (onMapReady) {
+              onMapReady(map)
+            }
           })
 
           mapInstanceRef.current = map
@@ -529,6 +544,34 @@ export function MapboxMap({
       schedulePendingUnmountFlush()
     }
   }, [schedulePendingUnmountFlush])
+
+  // Handle center offset when sidebar/panels are open
+  useEffect(() => {
+    if (!mapInstanceRef.current || !isLoaded || !centerOffset) return
+
+    const map = mapInstanceRef.current
+    const currentCenter = map.getCenter()
+    
+    if (currentCenter && typeof map.easeTo === "function") {
+      map.easeTo({
+        center: [currentCenter.lng, currentCenter.lat],
+        offset: [centerOffset.x, centerOffset.y],
+        duration: 500,
+      })
+    }
+  }, [centerOffset, isLoaded])
+
+  // Resize map when layout changes
+  useEffect(() => {
+    if (!mapInstanceRef.current || !isLoaded) return
+    
+    const map = mapInstanceRef.current
+    setTimeout(() => {
+      if (typeof map.resize === "function") {
+        map.resize()
+      }
+    }, 100)
+  }, [centerOffset, isLoaded])
 
   const tint = filterTint[activeFilter]
 

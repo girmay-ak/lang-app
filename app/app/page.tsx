@@ -7,7 +7,6 @@ import { FeedView } from "@/components/feed-view";
 import { ChatsView } from "@/components/chats-view";
 import { NotificationsView } from "@/components/notifications-view";
 import { NewExchangeView } from "@/components/new-exchange-view";
-import { BottomNav } from "@/components/bottom-nav";
 import { SetFlagModal } from "@/components/set-flag-modal";
 import { OnboardingCarousel } from "@/components/onboarding-carousel";
 import { SignupFlow } from "@/components/signup-flow";
@@ -638,22 +637,6 @@ export default function AppRoot() {
           </>
         )}
       </main>
-
-      {!isProfileModalOpen && !isChatOpen && !showNewExchange && (
-        <BottomNav
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          onNewExchange={() => {
-            if (activeTab === "map" && mapAvailabilityToggleRef.current) {
-              mapAvailabilityToggleRef.current();
-              return;
-            }
-            setShowNewExchange(true);
-          }}
-          chatBadgeCount={unreadChatCount}
-          notificationBadgeCount={unreadNotificationCount}
-        />
-      )}
 
       <SetFlagModal open={isFlagModalOpen} onOpenChange={setIsFlagModalOpen} />
     </div>

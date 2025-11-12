@@ -5,13 +5,11 @@ import { LinearGradient } from 'expo-linear-gradient'
 import Constants from 'expo-constants'
 import { WebView } from 'react-native-webview'
 import { Colors } from '../constants/Colors'
-import { MapPin, Users, Zap, Filter, Layers, X, MessageCircle, Star, Clock, MapPin as MapPinIcon } from 'lucide-react-native'
+import { MapPin, Users, Zap, Filter, Layers, X, MessageCircle, Star, Clock, MapPin as MapPinIcon, ChevronRight } from 'lucide-react-native'
 import * as Location from 'expo-location'
 import { createClient } from '../lib/supabase'
 import { useMap } from '../src/services/hooks/useMap'
 import { userService } from '../src/services/api/user.service'
-import AnimatedButton from '../components/AnimatedButton'
-import FloatingActionButton from '../components/FloatingActionButton'
 import ShimmerButton from '../components/ShimmerButton'
 import TextReveal from '../components/TextReveal'
 import AnimatedReanimated, { 
@@ -175,6 +173,7 @@ interface User {
   languagesSpoken: { language: string; flag: string; level: string }[]
   image: string
   isFallbackLocation?: boolean
+  matchScore?: number
 }
 
 const toPositiveHash = (value: string) => {
@@ -622,13 +621,13 @@ export default function MapScreen() {
   const previewCardTranslate = useSharedValue(200)
   const previewCardOpacity = useSharedValue(0)
   
-  // Animation values for buttons
-  const filterButtonScale = useSharedValue(1)
-  const availabilityButtonScale = useSharedValue(1)
-  const layersButtonScale = useSharedValue(1)
-  const nearbyBadgeScale = useSharedValue(1)
+  // Animation values for preview card / modal
   const modalScale = useSharedValue(0.9)
   const modalOpacity = useSharedValue(0)
+  const modalAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: modalScale.value }],
+    opacity: modalOpacity.value,
+  }))
 
   // Use real backend hook for nearby users
   const { users: nearbyUsers, userLocation: hookLocation, loading: usersLoading, error: usersError } = useMap({
@@ -707,9 +706,11 @@ export default function MapScreen() {
       })
       .map(user => {
         const distance = calculateDistance(referenceLatitude, referenceLongitude, user.lat, user.lng)
+        const matchScore = 83 + (toPositiveHash(user.id) % 14)
         return {
           ...user,
-          distance: formatDistanceLabel(distance)
+          distance: formatDistanceLabel(distance),
+          matchScore,
         }
       })
   }, [allUsers, userLocation, filterDistance, filterAvailableNow, filterSkillLevel])
@@ -719,10 +720,32 @@ export default function MapScreen() {
   }, [availableUsers, mapZoomLevel])
 
   const shouldShowMarkerDetails = mapZoomLevel >= MARKER_META_ZOOM_THRESHOLD
+  const activeUserCount = availableUsers.length
   const previewCardAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: previewCardTranslate.value }],
     opacity: previewCardOpacity.value,
   }))
+
+  const toggleSkillLevel = useCallback((level: string) => {
+    setFilterSkillLevel((prev) =>
+      prev.includes(level) ? prev.filter((item) => item !== level) : [...prev, level]
+    )
+  }, [])
+
+  const handleAvailabilityToggle = useCallback(() => {
+    setFilterAvailableNow((prev) => !prev)
+  }, [])
+
+  const handleDismissPreview = useCallback(() => {
+    setPreviewUser(null)
+  }, [])
+
+  const handleRadiusToggle = useCallback(() => {
+    const options = [5, 10, 25, 50]
+    const currentIndex = options.indexOf(filterDistance)
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % options.length
+    setFilterDistance(options[nextIndex])
+  }, [filterDistance])
 
   const handleUserPreview = useCallback((user: User) => {
     setPreviewUser(user)
@@ -769,14 +792,6 @@ export default function MapScreen() {
     return () => clearTimeout(timeoutId)
   }, [highlightedMarkerId])
 
-  // Animate nearby badge when count changes
-  useEffect(() => {
-    nearbyBadgeScale.value = withSequence(
-      withSpring(1.2, { damping: 8 }),
-      withSpring(1, { damping: 10 })
-    )
-  }, [availableUsers.length])
-
   // Animate modal on open/close
   useEffect(() => {
     if (selectedUser !== null) {
@@ -806,28 +821,6 @@ export default function MapScreen() {
       }
     }
   }, [selectedUser])
-
-  // Animation styles
-  const filterButtonStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: filterButtonScale.value }],
-  }))
-
-  const availabilityButtonStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: availabilityButtonScale.value }],
-  }))
-
-  const layersButtonStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: layersButtonScale.value }],
-  }))
-
-  const nearbyBadgeStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: nearbyBadgeScale.value }],
-  }))
-
-  const modalAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: modalScale.value }],
-    opacity: modalOpacity.value,
-  }))
 
   // Get current user from Supabase
   useEffect(() => {
@@ -1402,60 +1395,8 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Map</Text>
-          <Text style={styles.headerSubtitle}>Find language partners nearby</Text>
-        </View>
-        
-        {/* Top Controls - matching screenshot exactly */}
-        <View style={styles.topControls}>
-          {/* Filter Button */}
-          <TouchableOpacity 
-            style={styles.glassButton}
-            onPress={() => setIsFilterOpen(!isFilterOpen)}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Filter size={20} color={Colors.text.primary} />
-          </TouchableOpacity>
-
-          {/* Nearby Count - matching web exactly */}
-          <View style={styles.nearbyButton}>
-            <Users size={16} color={Colors.text.primary} />
-            <Text style={styles.nearbyText}>{availableUsers.length} nearby</Text>
-          </View>
-
-          {/* Right Side Buttons */}
-          <View style={styles.rightButtons}>
-            {/* Availability Button */}
-            <TouchableOpacity 
-              style={styles.availabilityButton}
-              activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Zap size={20} color={Colors.text.primary} />
-            </TouchableOpacity>
-            {/* Layers Button - Toggle map style */}
-            <TouchableOpacity 
-              style={styles.layersButton}
-              onPress={() => {
-                const newStyle = mapStyle === 'standard' ? 'satellite' : 'standard'
-                setMapStyle(newStyle)
-                // WebView will automatically reload with new style
-              }}
-              activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Layers size={20} color={Colors.text.primary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Map Container - Full Screen */}
-        <View style={styles.mapContainer}>
-          {hasMapSupport ? (
+      <View style={styles.mapContainer}>
+        {hasMapSupport ? (
             // Real map for standalone builds
             MapViewComponent && (
               <MapViewComponent
@@ -1527,7 +1468,7 @@ export default function MapScreen() {
                     )
                   }
 
-                  const user = item.user
+                  const { user } = item
                   return (
                     MarkerComponent && (
                       <MarkerComponent
@@ -1539,60 +1480,48 @@ export default function MapScreen() {
                         onPress={() => handleUserPreview(user)}
                       >
                         <View style={styles.markerContainer}>
-                          {/* Scan circles for nearby users (within 1km or 0m) */}
-                          {(() => {
-                            const distance = user.distance || '0m'
-                            let distanceValue = 0
-                            if (distance === '0m') {
-                              distanceValue = 0
-                            } else if (distance.includes('km')) {
-                              distanceValue = parseFloat(distance.replace('km', '').trim())
-                            } else if (distance.includes('m')) {
-                              distanceValue = parseFloat(distance.replace('m', '').trim()) / 1000
-                            }
-                            const showScan = distanceValue === 0 || distanceValue < 1
-                            if (!showScan) return null
-                            
-                            return (
-                              <>
-                                {[0, 1, 2].map((i) => (
-                                  <ScanCircle key={`scan-${i}`} delay={i * 700} />
-                                ))}
-                              </>
-                            )
-                          })()}
-                          <View
-                            style={[
-                              styles.userMarkerAvatar,
-                              user.availableNow && styles.userMarkerAvatarLive,
-                              highlightedMarkerId === user.id && styles.userMarkerHighlighted,
-                            ]}
-                          >
-                            <Text style={styles.userMarkerInitial}>{user.name[0]}</Text>
-                            {user.flag && (
-                              <View style={styles.flagBadge}>
-                                <Text style={styles.flagText}>{user.flag}</Text>
-                              </View>
-                            )}
-                          </View>
-                          {user.availableNow && shouldShowMarkerDetails && (
-                            <View style={styles.markerLivePill} pointerEvents="none">
-                              <Text style={styles.markerLiveText}>LIVE</Text>
-                            </View>
-                          )}
-                          {shouldShowMarkerDetails && (
+                          <View style={styles.markerAvatarShell}>
+                            {[0, 1].map((i) => (
+                              <ScanCircle key={`scan-${user.id}-${i}`} delay={i * 600} />
+                            ))}
                             <View
                               style={[
-                                styles.markerMetaPill,
-                                user.isFallbackLocation && styles.markerMetaFallback,
+                                styles.userMarkerAvatar,
+                                user.availableNow && styles.userMarkerAvatarLive,
+                                highlightedMarkerId === user.id && styles.userMarkerHighlighted,
                               ]}
-                              pointerEvents="none"
                             >
-                              <Text style={styles.markerMetaFlag}>{user.flag || '🌍'}</Text>
-                              <Text style={styles.markerMetaDistance}>{user.distance || '—'}</Text>
+                              <Text style={styles.userMarkerInitial}>{user.name[0]}</Text>
+                              {user.flag && (
+                                <View style={styles.flagBadge}>
+                                  <Text style={styles.flagText}>{user.flag}</Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                          {shouldShowMarkerDetails && (
+                            <View style={styles.markerDetailCard}>
+                              <View style={styles.markerDetailHeader}>
+                                <Text style={styles.markerDetailName}>{user.name}</Text>
+                                <Text style={styles.markerDetailMatch}>
+                                  {(user.matchScore ?? 85)}% match
+                                </Text>
+                              </View>
+                              <View style={styles.markerDetailMeta}>
+                                <View style={styles.markerDetailMetaItem}>
+                                  <MapPin size={12} color={Colors.accent.primary} />
+                                  <Text style={styles.markerDetailMetaText}>{user.distance}</Text>
+                                </View>
+                                <View style={styles.markerDetailMetaItem}>
+                                  <Zap size={12} color={Colors.accent.primary} />
+                                  <Text style={styles.markerDetailMetaText}>
+                                    {user.availableNow ? 'Available now' : 'Quick to reply'}
+                                  </Text>
+                                </View>
+                              </View>
                             </View>
                           )}
-                          </View>
+                        </View>
                       </MarkerComponent>
                     )
                   )
@@ -1645,8 +1574,179 @@ export default function MapScreen() {
                       )}
                     </View>
           )}
+      </View>
+
+      <SafeAreaView style={styles.filtersSafeArea} edges={['top']}>
+        <View style={styles.topBar}>
+          <View style={styles.topMeta}>
+            <Users size={16} color={Colors.text.secondary} />
+            <Text style={styles.topMetaText}>{activeUserCount} active now</Text>
+            <TouchableOpacity
+              style={styles.topBarButton}
+              onPress={() => setIsFilterOpen(true)}
+              activeOpacity={0.8}
+            >
+              <Filter size={16} color={Colors.text.primary} />
+              <Text style={styles.topBarButtonText}>Filters</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.radiusButton}
+            onPress={handleRadiusToggle}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.radiusValue}>{filterDistance}</Text>
+            <Text style={styles.radiusLabel}>km radius</Text>
+            <ChevronRight size={14} color={Colors.text.secondary} />
+          </TouchableOpacity>
         </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterRow}
+          contentContainerStyle={styles.filterRowContent}
+        >
+          <TouchableOpacity
+            onPress={handleAvailabilityToggle}
+            activeOpacity={0.85}
+            style={[styles.filterPill, filterAvailableNow && styles.filterPillActive]}
+          >
+            <Zap size={16} color={filterAvailableNow ? Colors.background.primary : Colors.text.secondary} />
+            <Text
+              style={[
+                styles.filterPillText,
+                filterAvailableNow && styles.filterPillTextActive,
+              ]}
+            >
+              Available now
+            </Text>
+          </TouchableOpacity>
+          {['beginner', 'intermediate', 'advanced'].map((level) => {
+            const isActive = filterSkillLevel.includes(level)
+            return (
+              <TouchableOpacity
+                key={level}
+                onPress={() => toggleSkillLevel(level)}
+                activeOpacity={0.85}
+                style={[styles.filterPill, isActive && styles.filterPillActive]}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    isActive && styles.filterPillTextActive,
+                  ]}
+                >
+                  {level.charAt(0).toUpperCase() + level.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+          <TouchableOpacity
+            onPress={() => {
+              const newStyle = mapStyle === 'standard' ? 'satellite' : 'standard'
+              setMapStyle(newStyle)
+            }}
+            activeOpacity={0.85}
+            style={[styles.filterPill, mapStyle === 'satellite' && styles.filterPillActive]}
+          >
+            <Layers
+              size={16}
+              color={mapStyle === 'satellite' ? Colors.background.primary : Colors.text.secondary}
+            />
+            <Text
+              style={[
+                styles.filterPillText,
+                mapStyle === 'satellite' && styles.filterPillTextActive,
+              ]}
+            >
+              {mapStyle === 'satellite' ? 'Satellite view' : 'Classic map'}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
       </SafeAreaView>
+
+      {previewUser && (
+        <AnimatedReanimated.View
+          style={[styles.previewCardWrapper, previewCardAnimatedStyle]}
+          pointerEvents="box-none"
+        >
+          <AnimatedReanimated.View
+            entering={FadeInUp.duration(250)}
+            style={styles.previewCard}
+          >
+            <View style={styles.previewHeader}>
+              <View style={styles.previewAvatar}>
+                <LinearGradient
+                  colors={['#38bdf8', '#6366f1']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.previewAvatarGradient}
+                >
+                  <Text style={styles.previewAvatarInitial}>{previewUser.name[0]}</Text>
+                </LinearGradient>
+                <View style={styles.previewFlag}>
+                  <Text style={styles.previewFlagText}>{previewUser.flag}</Text>
+                </View>
+              </View>
+              <View style={styles.previewTitleGroup}>
+                <Text style={styles.previewName}>{previewUser.name}</Text>
+                <Text style={styles.previewBio} numberOfLines={1}>
+                  {previewUser.bio}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.previewClose}
+                onPress={handleDismissPreview}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <X size={20} color={Colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.previewMetaRow}>
+              <View style={styles.previewMetaItem}>
+                <MapPin size={16} color={Colors.accent.primary} />
+                <Text style={styles.previewMetaText}>{previewUser.distance}</Text>
+              </View>
+              <View style={styles.previewMetaItem}>
+                <Clock size={16} color={Colors.accent.primary} />
+                <Text style={styles.previewMetaText}>{previewUser.availableFor}</Text>
+              </View>
+              <View style={styles.previewMetaItem}>
+                <Star size={16} color={Colors.accent.primary} fill={Colors.accent.primary} />
+                <Text style={styles.previewMetaText}>{previewUser.rating}</Text>
+              </View>
+            </View>
+            <View style={styles.previewLanguageRow}>
+              {previewUser.languagesSpoken.slice(0, 3).map((lang, index) => (
+                <View key={`${lang.language}-${index}`} style={styles.previewLanguageBadge}>
+                  <Text style={styles.previewLanguageFlag}>{lang.flag}</Text>
+                  <Text style={styles.previewLanguageText}>{lang.language}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.previewActions}>
+              <TouchableOpacity
+                style={styles.previewPrimaryAction}
+                activeOpacity={0.85}
+                onPress={() => handleOpenProfile(previewUser)}
+              >
+                <MessageCircle size={18} color="#ffffff" />
+                <Text style={styles.previewPrimaryText}>View profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.previewSecondaryAction}
+                activeOpacity={0.85}
+                onPress={() => {
+                  setSelectedUser(previewUser)
+                  setPreviewUser(null)
+                }}
+              >
+                <Text style={styles.previewSecondaryText}>Quick connect</Text>
+              </TouchableOpacity>
+            </View>
+          </AnimatedReanimated.View>
+        </AnimatedReanimated.View>
+      )}
 
       {/* User Profile Modal - Animated */}
       <Modal
@@ -1663,8 +1763,6 @@ export default function MapScreen() {
             <TouchableOpacity 
               style={StyleSheet.absoluteFill}
               activeOpacity={1}
-              pointerEvents={canDismissProfileModal ? 'auto' : 'none'}
-              disabled={!canDismissProfileModal}
               onPress={() => {
                 if (canDismissProfileModal) {
                   setSelectedUser(null)
@@ -1673,7 +1771,7 @@ export default function MapScreen() {
             />
             <AnimatedReanimated.View 
               entering={SlideInUp.springify().damping(20).stiffness(300)}
-              style={styles.modalContainer}
+              style={[styles.modalContainer, modalAnimatedStyle]}
               onStartShouldSetResponder={() => true}
             >
               <SafeAreaView style={styles.modalSafeArea} edges={['top', 'bottom']}>
@@ -1891,18 +1989,25 @@ export default function MapScreen() {
                     <View style={[styles.sliderThumb, { left: `${(filterDistance / 50) * 100}%` }]} />
                   </View>
                   <View style={styles.sliderLabels}>
-                    <Text style={styles.sliderLabel}>1km</Text>
+                    <Text style={styles.sliderLabel}>5km</Text>
                     <Text style={styles.sliderLabel}>50km</Text>
                   </View>
                   <TouchableOpacity
                     style={styles.sliderButton}
                     onPress={() => {
-                      const newDistance = filterDistance === 1 ? 5 : filterDistance === 5 ? 10 : filterDistance === 10 ? 25 : 50
-                      setFilterDistance(newDistance)
+                      const options = [5, 10, 25, 50]
+                      const currentIndex = options.indexOf(filterDistance)
+                      const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % options.length
+                      setFilterDistance(options[nextIndex])
                     }}
                   >
                     <Text style={styles.sliderButtonText}>
-                      {filterDistance === 1 ? '5km' : filterDistance === 5 ? '10km' : filterDistance === 10 ? '25km' : '1km'}
+                      {(() => {
+                        const options = [5, 10, 25, 50]
+                        const currentIndex = options.indexOf(filterDistance)
+                        const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % options.length
+                        return `${options[nextIndex]}km`
+                      })()}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -2002,83 +2107,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background.primary,
   },
-  safeArea: {
-    flex: 1,
-  },
-  topControls: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 120 : 100,
-    left: 16,
-    right: 16,
-    zIndex: 1000,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    pointerEvents: 'box-none',
-  },
-  glassButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.surface.glass,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border.primary,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  nearbyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface.glass,
-    borderRadius: 24,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: Colors.border.primary,
-    gap: 6,
-  },
-  nearbyText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text.primary,
-  },
-  rightButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  availabilityButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.accent.success,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: Colors.accent.success,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    marginRight: 8,
-  },
-  layersButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.surface.glass,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border.primary,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
   mapContainer: {
     flex: 1,
   },
@@ -2088,6 +2116,255 @@ const styles = StyleSheet.create({
   mapBackground: {
     flex: 1,
     position: 'relative',
+  },
+  filtersSafeArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 4 : 12,
+    pointerEvents: 'box-none',
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    gap: 16,
+  },
+  topMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  topMetaText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.text.secondary,
+  },
+  topBarButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+  },
+  topBarButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    textTransform: 'uppercase',
+  },
+  radiusButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+  },
+  radiusValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  radiusLabel: {
+    fontSize: 12,
+    color: Colors.text.secondary,
+  },
+  filterRow: {
+    marginTop: 12,
+  },
+  filterRowContent: {
+    paddingVertical: 4,
+    paddingRight: 16,
+    alignItems: 'center',
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginRight: 12,
+    gap: 8,
+  },
+  filterPillActive: {
+    backgroundColor: Colors.text.primary,
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+  },
+  filterPillTextActive: {
+    color: Colors.background.primary,
+  },
+  previewCardWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 26 : 16,
+  },
+  previewCard: {
+    backgroundColor: Colors.surface.glass,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  previewAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  previewAvatarGradient: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewAvatarInitial: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  previewFlag: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.text.primary,
+    borderWidth: 2,
+    borderColor: Colors.background.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewFlagText: {
+    fontSize: 14,
+  },
+  previewTitleGroup: {
+    flex: 1,
+  },
+  previewName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  previewBio: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    marginTop: 4,
+  },
+  previewClose: {
+    marginLeft: 12,
+  },
+  previewMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  previewMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  previewMetaText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  previewLanguageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  previewLanguageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.background.secondary,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 10,
+    gap: 6,
+  },
+  previewLanguageFlag: {
+    fontSize: 14,
+  },
+  previewLanguageText: {
+    fontSize: 12,
+    color: Colors.text.primary,
+    fontWeight: '600',
+  },
+  previewActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  previewPrimaryAction: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 16,
+    paddingVertical: 14,
+    backgroundColor: Colors.accent.primary,
+  },
+  previewPrimaryText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  previewSecondaryAction: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface.glass,
+  },
+  previewSecondaryText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text.primary,
   },
   webViewMap: {
     flex: 1,
@@ -2107,60 +2384,29 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     fontSize: 16,
   },
-  header: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 50,
-    left: 0,
-    right: 0,
-    zIndex: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    alignItems: 'center',
-    pointerEvents: 'box-none',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.text.primary,
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.text.secondary,
-  },
-  markersContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    pointerEvents: 'box-none',
-  },
   markerContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
+  markerAvatarShell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+  },
   scanCircle: {
     position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     borderWidth: 2,
-    borderColor: 'rgba(59, 130, 246, 0.4)',
+    borderColor: 'rgba(59, 130, 246, 0.35)',
     backgroundColor: 'transparent',
   },
-  userMarker: {
-    position: 'absolute',
-    alignItems: 'center',
-    flexDirection: 'column',
-    gap: 8,
-  },
   userMarkerAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: Colors.accent.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -2191,8 +2437,8 @@ const styles = StyleSheet.create({
   },
   flagBadge: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
+    bottom: -4,
+    right: -4,
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -2210,55 +2456,48 @@ const styles = StyleSheet.create({
   flagText: {
     fontSize: 16,
   },
-  markerLivePill: {
-    position: 'absolute',
-    top: -18,
-    alignSelf: 'center',
-    backgroundColor: '#22c55e',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    shadowColor: '#22c55e',
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 4,
-    pointerEvents: 'none',
+  markerDetailCard: {
+    marginTop: 12,
+    minWidth: 150,
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(100, 116, 139, 0.35)',
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
+    gap: 8,
   },
-  markerLiveText: {
-    color: '#052e16',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-  markerMetaPill: {
-    position: 'absolute',
-    bottom: -32,
+  markerDetailHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(15, 23, 42, 0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.4)',
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    pointerEvents: 'none',
+    justifyContent: 'space-between',
   },
-  markerMetaFallback: {
-    opacity: 0.85,
+  markerDetailName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text.primary,
   },
-  markerMetaFlag: {
-    fontSize: 16,
-  },
-  markerMetaDistance: {
-    color: '#e2e8f0',
+  markerDetailMatch: {
     fontSize: 12,
     fontWeight: '600',
-    letterSpacing: 0.5,
+    color: Colors.accent.primary,
+  },
+  markerDetailMeta: {
+    gap: 6,
+  },
+  markerDetailMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  markerDetailMetaText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: Colors.text.secondary,
   },
   clusterMarker: {
     width: 68,

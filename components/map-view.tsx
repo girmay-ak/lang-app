@@ -4,14 +4,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import {
+  Bell,
   CalendarCheck,
-  Filter,
+  ChevronLeft,
+  ChevronDown,
+  ChevronRight,
+  Compass,
+  Heart,
+  Home,
+  MapPin,
+  Menu,
   MessageCircle,
+  Search,
+  Settings,
   Smile,
+  Star,
   Users,
   Zap,
   X,
+  Clock,
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { MapboxMap, type MapFilter, type MapPoi } from "./mapbox-map"
 import {
   ProfileCard,
@@ -29,6 +42,15 @@ import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "@/components/ui/textarea"
 import { Slider } from "@/components/ui/slider"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
 interface MapUser {
   id: string
@@ -87,6 +109,45 @@ const MAP_FILTERS: Array<{ id: MapFilter; icon: string; label: string; hint: str
   { id: "places", icon: "🏪", label: "Places", hint: "Cafés & schools" },
   { id: "events", icon: "📅", label: "Events", hint: "Pop-up exchange sessions" },
   { id: "highlights", icon: "⭐", label: "Highlights", hint: "Live meetups & available friends" },
+]
+
+const SIDEBAR_SAMPLE_MESSAGES = [
+  {
+    id: "msg-1",
+    name: "Carlos",
+    languagePair: "EN ↔ ES",
+    preview: "Want to grab coffee at Café Esperanto later today?",
+    time: "2m ago",
+    status: "typing…",
+  },
+  {
+    id: "msg-2",
+    name: "Anna",
+    languagePair: "DE ↔ NL",
+    preview: "I found a Dutch pronunciation workshop this weekend!",
+    time: "12m ago",
+    status: "replied",
+  },
+  {
+    id: "msg-3",
+    name: "Yuki",
+    languagePair: "EN ↔ JP",
+    preview: "Thanks for the vocabulary list. Shall we practice on Thursday?",
+    time: "1h ago",
+    status: "delivered",
+  },
+]
+
+const SIDEBAR_HOME_SPOTLIGHTS = [
+  { id: "spot-1", title: "14 live partners", subtitle: "Around Den Haag", accent: "from-[#8EC5FC] to-[#E0C3FC]" },
+  { id: "spot-2", title: "3 new events", subtitle: "This weekend", accent: "from-[#F9D423] to-[#FF4E50]" },
+  { id: "spot-3", title: "You’re on a 7 day streak", subtitle: "Keep the flow going!", accent: "from-[#6EE7B7] to-[#3B82F6]" },
+]
+
+const SIDEBAR_FAVORITES = [
+  { id: "fav-1", name: "Emma", languages: "EN ↔ NL", availability: "Evenings • Scheveningen" },
+  { id: "fav-2", name: "Ahmed", languages: "AR ↔ EN", availability: "Afternoons • City Centre" },
+  { id: "fav-3", name: "Lisa", languages: "DE ↔ EN", availability: "Weekends • Delft" },
 ]
 
 const toPositiveHash = (value: string) => {
@@ -149,6 +210,18 @@ const LEVEL_GRADIENT: Record<string, { from: string; to: string; label: string }
 }
 
 const DEFAULT_LEVEL_GRADIENT = { from: "#64748b", to: "#1e293b", label: "Explorer" }
+const RADAR_ANIMATION_STYLES = `
+@keyframes pulseRing {
+  0% { box-shadow: 0 0 0 0 rgba(125, 211, 252, 0.45); opacity: 0.6; }
+  70% { box-shadow: 0 0 0 80px rgba(125, 211, 252, 0); opacity: 0; }
+  100% { box-shadow: 0 0 0 0 rgba(125, 211, 252, 0); opacity: 0; }
+}
+@keyframes radarSweep {
+  0% { transform: rotate(0deg); opacity: 0.8; }
+  60% { opacity: 0.2; }
+  100% { transform: rotate(360deg); opacity: 0.8; }
+}
+`
 
 const normalizeLevelKey = (value?: string | null) => {
   if (!value) return "beginner"
@@ -371,8 +444,40 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   const previousEventIdsRef = useRef<Set<string>>(new Set())
   const [selectedUserIndex, setSelectedUserIndex] = useState<number | null>(null)
   const [favoriteProfileIds, setFavoriteProfileIds] = useState<Set<string>>(new Set())
+  const [activeLanguageChip, setActiveLanguageChip] = useState<string>("All")
+  const [activePreviewUserId, setActivePreviewUserId] = useState<string | null>(null)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [sidebarTargetWidth, setSidebarTargetWidth] = useState(256)
+  const [isSidebarOverlayOpen, setIsSidebarOverlayOpen] = useState(false)
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false)
+  const [activeSidebarItem, setActiveSidebarItem] = useState<"home" | "messages" | "discover" | "favorites" | "settings">(
+    "discover",
+  )
+  const [isPeoplePanelOpen, setIsPeoplePanelOpen] = useState(false)
+  const mapInstanceRef = useRef<any>(null)
 
+  const isSidebarExpanded = !isSidebarCollapsed
   const { toast } = useToast()
+
+  // Calculate center offset based on sidebar and panel widths
+  const centerOffset = useMemo(() => {
+    if (typeof window === "undefined") return undefined
+    
+    // Sidebar width: 256px (lg:w-64) when expanded on lg+, 224px (md:w-56) on md, 0 when collapsed
+    let sidebarWidth = 0
+    if (sidebarTargetWidth > 0) {
+      sidebarWidth = isSidebarExpanded ? sidebarTargetWidth : 60
+    }
+    
+    // Panel width: 520px when discover panel is open on xl screens
+    const panelWidth =
+      activeSidebarItem === "discover" && window.innerWidth >= 1280 && !isLeftPanelCollapsed ? 520 : 0
+    
+    // Offset map center to the left when sidebar/panels are open
+    const totalOffset = (sidebarWidth + panelWidth) / 2
+    
+    return totalOffset > 0 ? { x: -totalOffset, y: 0 } : undefined
+  }, [isSidebarExpanded, sidebarTargetWidth, activeSidebarItem, isLeftPanelCollapsed])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -430,6 +535,24 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       isMounted = false
     }
   }, [availabilityMessage])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const updateSidebarState = () => {
+      const width = window.innerWidth
+      const baseWidth = width >= 1024 ? 256 : width >= 768 ? 224 : 0
+      setSidebarTargetWidth(baseWidth)
+      setIsSidebarCollapsed((prev) => (width < 1024 ? true : prev))
+      if (width >= 768) {
+        setIsSidebarOverlayOpen(false)
+      }
+    }
+
+    updateSidebarState()
+    window.addEventListener("resize", updateSidebarState)
+    return () => window.removeEventListener("resize", updateSidebarState)
+  }, [])
 
   const viewerLanguages = useMemo(() => {
     const speak =
@@ -717,6 +840,43 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     })
   }, [nearbyUsers, viewerLanguages, currentCity])
 
+  const languageChipOptions = useMemo(() => {
+    const languages = new Map<string, number>()
+    mapUsers.forEach((user) => {
+      user.languagesSpoken?.forEach((lang) => {
+        const key = lang.language
+        languages.set(key, (languages.get(key) ?? 0) + 1)
+      })
+    })
+    return Array.from(languages.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([language]) => language)
+      .slice(0, 6)
+  }, [mapUsers])
+
+  const filteredUsers = useMemo(() => {
+    if (activeLanguageChip === "All") {
+      return mapUsers
+    }
+    const lower = activeLanguageChip.toLowerCase()
+    return mapUsers.filter((user) =>
+      user.languagesSpoken?.some((lang) => lang.language.toLowerCase() === lower),
+    )
+  }, [mapUsers, activeLanguageChip])
+
+  const activePreviewUser = useMemo(() => {
+    if (!activePreviewUserId) return null
+    return filteredUsers.find((user) => user.id === activePreviewUserId) ?? null
+  }, [filteredUsers, activePreviewUserId])
+
+  useEffect(() => {
+    if (!activePreviewUserId) return
+    const stillExists = filteredUsers.some((user) => user.id === activePreviewUserId)
+    if (!stillExists) {
+      setActivePreviewUserId(null)
+    }
+  }, [filteredUsers, activePreviewUserId])
+
   const closeProfileSheet = useCallback(() => {
     setSelectedUserIndex(null)
   }, [])
@@ -762,11 +922,43 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   }, [])
 
   const effectiveUserLocation = useMemo(() => {
-    return userLocation ?? {
-    lat: FALLBACK_CITY_CENTER.latitude,
-    lng: FALLBACK_CITY_CENTER.longitude,
-  }
+    return (
+      userLocation ?? {
+        lat: FALLBACK_CITY_CENTER.latitude,
+        lng: FALLBACK_CITY_CENTER.longitude,
+      }
+    )
   }, [userLocation])
+
+  // Recenter map function
+  const recenterMap = useCallback(() => {
+    if (!mapInstanceRef.current || !effectiveUserLocation) return
+
+    const map = mapInstanceRef.current
+    if (typeof map.easeTo === "function") {
+      map.easeTo({
+        center: [effectiveUserLocation.lng, effectiveUserLocation.lat],
+        zoom: 13,
+        duration: 500,
+      })
+    }
+  }, [effectiveUserLocation])
+
+  // Keyboard shortcut for recentering (R key)
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === "r" || e.key === "R") {
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+          return // Don't trigger if typing in input
+        }
+        recenterMap()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyPress)
+    return () => window.removeEventListener("keydown", handleKeyPress)
+  }, [recenterMap])
+
   const nearbyCount = nearbyUsers.length
   const displayCity = currentCity ?? "Den Haag"
   const mapPreviewUrl = useMemo(() => {
@@ -837,6 +1029,10 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     })
   }, [mapUsers, displayCity])
 
+  const previewProfile = activePreviewUser
+    ? profileCardProfiles.find((profile) => String(profile.id) === activePreviewUser.id) ?? null
+    : null
+
   const resolveProfileTarget = useCallback(
     (profile?: ProfileCardProfile) => {
       if (profile) {
@@ -848,9 +1044,13 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       if (selectedUser) {
         return { user: selectedUser, index: selectedUserIndex ?? -1 }
       }
+      if (activePreviewUser) {
+        const previewIndex = mapUsers.findIndex((candidate) => candidate.id === activePreviewUser.id)
+        return { user: activePreviewUser, index: previewIndex }
+      }
       return null
     },
-    [mapUsers, selectedUser, selectedUserIndex],
+    [mapUsers, selectedUser, selectedUserIndex, activePreviewUser],
   )
 
   const viewerMarker = useMemo<MapUser | null>(() => {
@@ -1011,9 +1211,11 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       return viewerMarker ? [viewerMarker] : []
     }
     const base =
-      activeMapFilter === "highlights" ? mapUsers.filter((user) => user.availableNow) : mapUsers
+      activeMapFilter === "highlights"
+        ? filteredUsers.filter((user) => user.availableNow)
+        : filteredUsers
     return viewerMarker ? [viewerMarker, ...base] : base
-  }, [activeMapFilter, viewerMarker, mapUsers])
+  }, [activeMapFilter, viewerMarker, filteredUsers])
 
   const filteredPois = useMemo(() => {
     switch (activeMapFilter) {
@@ -1073,19 +1275,24 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   }
 
   const handleUserSelect = (user: MapUser | null) => {
-    if (!user) {
+    if (!user || user.isViewer) {
+      setActivePreviewUserId(null)
       closeProfileSheet()
       return
     }
 
-    if (user.isViewer) {
-      closeProfileSheet()
+    const filteredIndex = filteredUsers.findIndex((candidate) => candidate.id === user.id)
+    if (filteredIndex === -1) {
+      setActivePreviewUserId(null)
       return
     }
 
-    const index = mapUsers.findIndex((candidate) => candidate.id === user.id)
-    if (index !== -1) {
-      openProfileAtIndex(index)
+    setActiveSidebarItem("discover")
+    setActivePreviewUserId(user.id)
+
+      const fullIndex = mapUsers.findIndex((candidate) => candidate.id === user.id)
+      if (selectedUserIndex !== null && fullIndex !== -1) {
+        openProfileAtIndex(fullIndex)
     }
   }
 
@@ -1326,7 +1533,6 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   )
 
   const favoriteIdList = useMemo(() => Array.from(favoriteProfileIds), [favoriteProfileIds])
-  const isProfileOpen = selectedUserIndex !== null && profileCardProfiles.length > 0
 
   const handleAddNote = useCallback(
     (profile?: ProfileCardProfile) => {
@@ -1341,27 +1547,649 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     [selectedUser, toast],
   )
 
+  const sidebarNavItems: Array<{
+    id: "home" | "messages" | "discover" | "favorites" | "settings"
+    label: string
+    icon: LucideIcon
+    gradient: string
+  }> = [
+    { id: "home", label: "Home", icon: Home, gradient: "from-[#ff9a9e] to-[#fad0c4]" },
+    { id: "messages", label: "Messages", icon: MessageCircle, gradient: "from-[#a18cd1] to-[#fbc2eb]" },
+    { id: "discover", label: "Discover", icon: Compass, gradient: "from-[#5ee7df] to-[#b490ca]" },
+    { id: "favorites", label: "Favorites", icon: Heart, gradient: "from-[#f78ca0] to-[#f9748f]" },
+    { id: "settings", label: "Settings", icon: Settings, gradient: "from-[#cfd9df] to-[#e2ebf0]" },
+  ]
+
+  const isPreviewFavorite =
+    previewProfile && favoriteProfileIds.has(String(previewProfile.id))
+
+  const handleTogglePreviewFavorite = () => {
+    if (!previewProfile) return
+    handleProfileFavoriteChange(previewProfile, !isPreviewFavorite)
+  }
+
+  const toggleSidebarOverlay = () => {
+    setIsSidebarOverlayOpen((prev) => !prev)
+  }
+
+  const closeSidebarOverlay = () => setIsSidebarOverlayOpen(false)
+
+  const viewerInitials = useMemo(() => {
+    if (!currentUserProfile?.full_name) return "YOU"
+    const parts = currentUserProfile.full_name.trim().split(/\s+/).filter(Boolean)
+    if (parts.length === 0) return "YOU"
+    const initials = parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("")
+    return initials || "YOU"
+  }, [currentUserProfile?.full_name])
+
+  const viewerDisplayName = currentUserProfile?.full_name ?? "Explorer"
+  const viewerAvatarUrl = currentUserProfile?.avatar_url ?? "/placeholder-user.jpg"
+
+  const handlePreviewChat = () => {
+    if (!previewProfile) return
+    handleOpenChat(previewProfile)
+  }
+
+  const sidebarContent = useMemo(() => {
+    if (activeSidebarItem === "discover") {
+      return (
+        <>
+          <div className="rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-5 shadow-[0_6px_28px_rgba(0,0,0,0.45)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.72)]">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-white/45">Find Partners</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">{nearbyCount} nearby language partners</h2>
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/70">
+                    <MapPin className="h-3.5 w-3.5 text-rose-300" />
+                    {displayCity ?? "Den Haag"}, Netherlands
+                </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-white/60">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-white"
+                  >
+                    <Menu className="h-3.5 w-3.5" />
+                    List
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full px-3 py-1 transition hover:bg-white/10 hover:text-white"
+                  >
+                    <Compass className="h-3.5 w-3.5" />
+                    Map
+                  </button>
+              </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+                <div className="relative flex-1 min-w-[220px]">
+                  <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/50">
+                    <Search className="h-4 w-4" />
+                  </div>
+                  <input
+                    value={displayCity ?? ""}
+                    readOnly
+                    className="w-full rounded-2xl border border-white/10 bg-[rgba(20,20,30,0.6)] py-2.5 pl-10 pr-3 text-sm text-white placeholder:text-white/50 shadow-[0_4px_18px_rgba(0,0,0,0.4)] outline-none transition hover:bg-[rgba(20,20,30,0.72)] focus:border-white/20 focus:bg-[rgba(20,20,30,0.72)]"
+                    placeholder="Search language partners or cities..."
+                    aria-label="Search partners"
+                  />
+                </div>
+                <Button
+                  onClick={() => setIsFilterOpen(true)}
+                  variant="outline"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[rgba(99,102,241,0.75)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.25em] text-white transition hover:bg-[rgba(99,102,241,0.9)]"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                  Filters
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveLanguageChip("All")}
+                  className={cn(
+                    "flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:bg-white/10",
+                    activeLanguageChip === "All" && "border-transparent bg-[rgba(103,114,255,0.22)] text-white shadow-[0_12px_35px_rgba(99,102,241,0.28)]",
+                  )}
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[10px] text-white/70">
+                    •
+                  </span>
+                  All
+                </button>
+                {languageChipOptions.map((language) => {
+                  const isActive = activeLanguageChip === language
+                  return (
+                    <button
+                      key={language}
+                      type="button"
+                      onClick={() => setActiveLanguageChip(language)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/70 transition hover:bg-white/10",
+                        isActive && "border-transparent bg-[rgba(103,114,255,0.22)] text-white shadow-[0_12px_35px_rgba(99,102,241,0.28)]",
+                      )}
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[10px]">
+                        {getLanguageFlag(language)}
+                      </span>
+                      {language}
+                    </button>
+                  )
+                })}
+                <button
+                  type="button"
+                  onClick={() => setFilterAvailableNow((prev) => !prev)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/70 transition hover:bg-white/10",
+                    filterAvailableNow && "border-transparent bg-[rgba(16,185,129,0.2)] text-white shadow-[0_12px_35px_rgba(16,185,129,0.32)]",
+                  )}
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-emerald-300">
+                    <Zap className="h-3 w-3" />
+                  </span>
+                  Live now
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">
+                <span className="flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5 text-emerald-300" />
+                  {filterAvailableNow ? "Showing available now" : "Showing all availability"}
+                </span>
+                <span className="flex items-center gap-2">
+                  <Users className="h-3.5 w-3.5 text-indigo-300" />
+                  {filteredUsers.length || nearbyCount} live
+                </span>
+                <span className="flex items-center gap-2">
+                  <Star className="h-3.5 w-3.5 text-amber-300" />
+                  Smart match score active
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all">
+            <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+              <div className="text-sm font-semibold uppercase tracking-[0.3em] text-white">Nearby partners</div>
+              <div className="text-xs font-semibold text-white/60">Sorted by distance</div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+              {filteredUsers.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  className="rounded-2xl border border-dashed border-white/8 bg-[rgba(20,20,30,0.6)] p-6 text-center text-sm text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px]"
+                >
+                  No partners match your current filters. Try adjusting the language or availability chip.
+                </motion.div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <AnimatePresence mode="popLayout">
+                    {filteredUsers.map((user) => {
+                      const isActive = activePreviewUser?.id === user.id
+                      const matchValue = Math.round(user.matchScore ?? 80)
+                      const ratingValue = Number.isFinite(user.rating) ? user.rating.toFixed(1) : "4.8"
+                      const exchangesStat =
+                        user.stats?.find((stat) => /trade|exchange/i.test(stat.label))?.value ??
+                        `${Math.max(1, Math.round((user.matchScore ?? 60) / 2))} exchanges`
+                      const learnBadges = (user.learns ?? []).slice(0, 2)
+                      const teachBadges = (user.teaches ?? []).slice(0, 2)
+
+                      return (
+                        <motion.button
+                          key={user.id}
+                          layout
+                          type="button"
+                          onClick={() => handleUserSelect(user)}
+                          initial={{ opacity: 0, y: 16 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -16 }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          transition={{ duration: 0.25, ease: "easeOut" }}
+                          className={cn(
+                            "w-full rounded-2xl border px-5 py-5 text-left transition-all mb-3",
+                            isActive
+                              ? "border-transparent bg-gradient-to-br from-[#2f1f57]/90 to-[#201742]/90 shadow-[0_18px_50px_rgba(0,0,0,0.6)]"
+                              : "border-white/8 bg-[rgba(20,20,30,0.6)] hover:bg-[rgba(30,30,40,0.75)] hover:border-white/15 hover:-translate-y-0.5",
+                          )}
+                        >
+                          <div className="flex gap-4">
+                            <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#667eea] to-[#764ba2] text-lg font-semibold text-white shadow-lg shadow-indigo-500/40">
+                              {(user.name ?? "L").slice(0, 1)}
+                              {user.isOnline && (
+                                <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#1b1b29] bg-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.8)]" />
+                              )}
+                            </div>
+                            <div className="flex-1 space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2 text-base font-semibold text-white">
+                                    {user.name ?? "Language Explorer"}
+                                    {user.isOnline && <span className="text-xs text-emerald-300">• Online now</span>}
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-white/60">
+                                    <span className="flex items-center gap-1">
+                                      <MapPin className="h-3.5 w-3.5 text-rose-300" />
+                                      {user.distance}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <Star className="h-3.5 w-3.5 text-amber-300" />
+                                      {ratingValue}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <MessageCircle className="h-3.5 w-3.5 text-sky-300" />
+                                      {exchangesStat}
+                                    </span>
+                                  </div>
+                                </div>
+                                <span className="rounded-xl bg-gradient-to-r from-emerald-400 to-emerald-600 px-3 py-1 text-xs font-bold text-white">
+                                  {matchValue}%
+                                </span>
+                              </div>
+                              <p className="text-sm leading-relaxed text-white/80">
+                                {user.availabilityMessage ?? user.bio ?? "Ready to connect for a language exchange."}
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {learnBadges.map((badge) => (
+                                  <span
+                                    key={`${user.id}-learn-${badge.language}`}
+                                    className="inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-200"
+                                  >
+                                    {badge.flag} Learning {badge.language}
+                                  </span>
+                                ))}
+                                {teachBadges.map((badge) => (
+                                  <span
+                                    key={`${user.id}-teach-${badge.language}`}
+                                    className="inline-flex items-center gap-2 rounded-xl border border-sky-400/40 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-200"
+                                  >
+                                    {badge.flag} Teaching {badge.language}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </motion.button>
+                      )
+                    })}
+                  </AnimatePresence>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )
+    }
+
+    if (activeSidebarItem === "home") {
+      return (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-200">Today</p>
+            <h2 className="mt-3 text-3xl font-semibold text-white">
+              Keep the streak going, {viewerDisplayName.split(" ")[0] ?? "Explorer"}!
+            </h2>
+            <p className="mt-2 text-sm text-indigo-100/70">
+              Join an event, start a chat, or flip your availability on for spontaneous exchanges.
+            </p>
+            <div className="mt-5 grid gap-4 sm:grid-cols-3">
+              {SIDEBAR_HOME_SPOTLIGHTS.map((spot) => (
+                <div
+                  key={spot.id}
+                  className={cn(
+                    "rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-white shadow-inner shadow-black/30",
+                    `bg-gradient-to-br ${spot.accent}`,
+                  )}
+                >
+                  <p className="text-sm font-semibold text-slate-900">{spot.title}</p>
+                  <p className="text-xs text-slate-800/80">{spot.subtitle}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Next steps</p>
+            <ul className="mt-4 space-y-3 text-sm text-white/70">
+              <li className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-emerald-300">
+                    <Zap className="h-4 w-4" />
+                </span>
+                Ping a nearby partner who’s live right now.
+              </li>
+              <li className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-sky-300">
+                    <CalendarCheck className="h-4 w-4" />
+                </span>
+                RSVP to Saturday’s Matcha &amp; Manuscripts meetup.
+              </li>
+              <li className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-rose-300">
+                    <Compass className="h-4 w-4" />
+                </span>
+                Update your goals to unlock personalised matches.
+              </li>
+            </ul>
+          </div>
+        </div>
+      )
+    }
+
+    if (activeSidebarItem === "messages") {
+      return (
+        <div className="rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Inbox</p>
+              <h2 className="mt-2 text-xl font-semibold text-white">Recent conversations</h2>
+            </div>
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button
+              variant="outline"
+              className="rounded-full border border-white/8 bg-[rgba(99,102,241,0.8)] px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-[rgba(99,102,241,0.9)] hover:border-white/15"
+            >
+              Open full chat
+            </Button>
+            </motion.div>
+          </div>
+          <div className="mt-5 space-y-3">
+            {SIDEBAR_SAMPLE_MESSAGES.map((message) => (
+              <motion.button
+                key={message.id}
+                whileTap={{ scale: 0.97 }}
+                whileHover={{ scale: 1.02 }}
+                onClick={() => setActiveSidebarItem("discover")}
+                className="w-full rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-4 py-3 text-left text-sm text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)] hover:border-white/15"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{message.name}</p>
+                    <p className="text-xs text-white/60">{message.languagePair}</p>
+                  </div>
+                  <span className="text-xs text-white/40">{message.time}</span>
+                </div>
+                <p className="mt-2 text-sm text-white/70">{message.preview}</p>
+                <p className="mt-2 text-xs uppercase tracking-[0.2em] text-emerald-300">{message.status}</p>
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    if (activeSidebarItem === "favorites") {
+      return (
+        <div className="rounded-2xl border border-white/10 bg-[rgba(25,25,25,0.35)] p-6 shadow-xl backdrop-blur-[20px] transition-all hover:bg-[rgba(25,25,25,0.45)]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-white">Saved partners</h2>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              variant="outline"
+              className="rounded-full border border-white/8 bg-[rgba(99,102,241,0.8)] px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-[rgba(99,102,241,0.9)] hover:border-white/15"
+            >
+              Manage favorites
+            </Button>
+            </motion.div>
+          </div>
+          <div className="mt-4 grid gap-3">
+            {SIDEBAR_FAVORITES.map((fav) => (
+              <motion.button
+                key={fav.id}
+                whileTap={{ scale: 0.97 }}
+                whileHover={{ scale: 1.02 }}
+                onClick={() => {
+                  const target = mapUsers.find((candidate) =>
+                    candidate.name?.toLowerCase().includes(fav.name.toLowerCase()),
+                  )
+                  if (target) {
+                    handleUserSelect(target)
+                  }
+                }}
+                className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white transition-all hover:bg-white/10 hover:border-white/20"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-white">{fav.name}</p>
+                  <p className="text-xs text-white/60">{fav.languages}</p>
+                  <p className="text-xs text-white/50">{fav.availability}</p>
+                </div>
+                <Heart className="h-4 w-4 text-rose-300" />
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
+        <h2 className="text-xl font-semibold text-white">Quick settings</h2>
+        <div className="mt-4 space-y-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+            <p className="text-sm font-semibold text-white">Show me when I’m live</p>
+            <p className="text-xs text-white/50">Toggle availability highlights on the map.</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+            <p className="text-sm font-semibold text-white">Smart match boosts</p>
+            <p className="text-xs text-white/50">
+              Boost your profile to nearby partners when you’re on a streak.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+            <p className="text-sm font-semibold text-white">Weekly digest</p>
+            <p className="text-xs text-white/50">Receive a Sunday snapshot of new partners and events.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }, [
+    activeSidebarItem,
+    activeLanguageChip,
+    filterAvailableNow,
+    filteredUsers,
+    activePreviewUser?.id,
+    displayCity,
+    filterDistance,
+    nearbyCount,
+    viewerDisplayName,
+    mapUsers,
+    handleUserSelect,
+    languageChipOptions,
+  ])
+
+  const renderSidebarNavItems = (showLabels: boolean, onItemClick?: () => void) =>
+    sidebarNavItems.map((item) => {
+      const Icon = item.icon
+      const isActive = activeSidebarItem === item.id
+      return (
+        <motion.button
+          key={item.id}
+          type="button"
+          aria-label={item.label}
+          onClick={() => {
+            setActiveSidebarItem(item.id)
+            onItemClick?.()
+          }}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className={cn(
+            "group relative flex w-full items-center gap-3 overflow-visible rounded-2xl px-4 py-3 text-sm font-semibold transition-all",
+            isActive
+              ? "text-white shadow-[0_12px_35px_rgba(79,70,229,0.35)]"
+              : "text-slate-300 hover:text-white",
+            showLabels ? "" : "md:px-0 md:py-3 md:justify-center",
+          )}
+        >
+          {isActive && (
+            <motion.span
+              layoutId="sidebar-active-pill"
+              className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-r from-[rgba(130,70,255,0.3)] via-[rgba(255,130,255,0.15)] to-transparent"
+              transition={{ type: "spring", stiffness: 200, damping: 28 }}
+            />
+          )}
+          <span
+            className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg text-white shadow-inner shadow-black/30 transition-all duration-200",
+              isActive
+                ? "border-transparent bg-gradient-to-br " +
+                  item.gradient +
+                  " text-slate-900 shadow-[0_10px_25px_rgba(99,102,241,0.45)]"
+                : "group-hover:border-transparent group-hover:bg-gradient-to-br group-hover:from-white/20 group-hover:to-white/5 group-hover:shadow-[0_0_18px_rgba(129,140,248,0.45)]",
+            )}
+          >
+            <Icon className={cn("h-5 w-5", isActive ? "text-slate-900" : "text-white/80")} />
+          </span>
+          <span
+            className={cn(
+              "text-left text-sm tracking-wide transition-all duration-200",
+              showLabels ? "md:block" : "md:hidden md:-translate-x-1 md:opacity-0",
+              "lg:block lg:translate-x-0 lg:opacity-100",
+            )}
+          >
+            {item.label}
+          </span>
+          {!showLabels && (
+            <span className="pointer-events-none absolute left-full top-1/2 ml-3 flex -translate-y-1/2 translate-x-0 items-center rounded-full border border-white/10 bg-[rgba(20,20,30,0.9)] px-3 py-1 text-xs font-semibold text-white opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.45)] transition group-hover:translate-x-1 group-hover:opacity-100">
+              {item.label}
+            </span>
+          )}
+        </motion.button>
+      )
+    })
+
+  const SidebarUserCard = ({ showLabels }: { showLabels: boolean }) => {
+    if (showLabels) {
+      return (
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-lg shadow-black/30">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
+            You&apos;re set
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
+              {viewerInitials.slice(0, 2)}
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-white">{viewerMarker?.name ?? "You"}</p>
+              <p className="text-xs text-slate-300">
+                {viewerMarker?.availabilityMessage ?? "Set your availability to appear on the map."}
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => setIsAvailabilityModalOpen(true)}
+            className="mt-4 w-full rounded-full bg-gradient-to-r from-[#ff5f6d] via-[#c850c0] to-[#4158d0] text-sm font-semibold text-white hover:opacity-90"
+          >
+            Set availability
+          </Button>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-3xl border border-white/10 bg-white/5 p-3 shadow-lg shadow-black/30">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
+          {viewerInitials.slice(0, 2)}
+        </div>
+        <Button
+          onClick={() => setIsAvailabilityModalOpen(true)}
+          size="icon"
+          className="h-10 w-10 rounded-full bg-gradient-to-r from-[#ff5f6d] via-[#c850c0] to-[#4158d0] text-white hover:opacity-90"
+          title="Set availability"
+        >
+          <Zap className="h-4 w-4" />
+        </Button>
+      </div>
+    )
+  }
+
+
   return (
-    <div className="relative h-full w-full overflow-hidden bg-background">
-      <FilterPanel isOpen={isFilterOpen} onClose={() => setIsFilterOpen(false)} />
+    <div className="relative h-full w-full overflow-hidden bg-[#06091c]">
+      <style>{RADAR_ANIMATION_STYLES}</style>
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.2),transparent_55%),radial-gradient(circle_at_bottom,rgba(16,185,129,0.12),transparent_60%)]" />
+
+      <div className="relative z-10 flex h-full w-full flex-col overflow-hidden">
+      <AnimatePresence>
+        {isFilterOpen && (
+          <FilterPanel isOpen onClose={() => setIsFilterOpen(false)} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isSidebarOverlayOpen && (
+          <motion.div
+            key="sidebar-overlay"
+            className="fixed inset-0 z-[1500] md:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="absolute inset-0 bg-black/60"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeSidebarOverlay}
+            />
+            <motion.aside
+              className="absolute left-0 top-0 flex h-full w-72 flex-col justify-between rounded-r-2xl border-r border-white/8 bg-[rgba(20,20,30,0.6)] px-6 py-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px]"
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              transition={{ type: "spring", stiffness: 280, damping: 30 }}
+            >
+              <div className="space-y-8">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-[#ff5f6d] to-[#ffc371] text-sm font-semibold text-white shadow-md">
+                      LF
+                    </div>
+                    <div className="text-left">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-300">
+                        LangExchange
+                      </p>
+                      <p className="text-sm font-semibold text-white">Discover</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeSidebarOverlay}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white/70 transition hover:bg-white/15"
+                    aria-label="Close navigation"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <nav className="space-y-2">
+                  {renderSidebarNavItems(true, closeSidebarOverlay)}
+                </nav>
+              </div>
+              <SidebarUserCard showLabels />
+            </motion.aside>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {isLoading && (
-        <div className="absolute inset-0 z-[1200] flex items-center justify-center bg-slate-950/70 backdrop-blur-md">
+        <div className="absolute inset-0 z-[1200] flex items-center justify-center bg-slate-900/20 backdrop-blur">
           <div className="text-center">
             <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-sky-500 border-t-transparent" />
-            <p className="text-sm text-slate-200/80">Scanning for nearby partners...</p>
+            <p className="text-sm text-slate-600">Scanning for nearby partners...</p>
           </div>
         </div>
       )}
 
       {!isLoading && loadError && (
-        <div className="absolute inset-x-4 top-20 z-[1200]">
-          <div className="rounded-2xl border border-red-400/40 bg-red-500/20 px-4 py-3 text-sm text-red-100 shadow-xl backdrop-blur">
+        <div className="absolute inset-x-6 top-10 z-[1200]">
+          <div className="rounded-2xl border border-rose-500/40 bg-rose-500/15 px-4 py-3 text-sm text-rose-200 shadow-lg shadow-rose-900/40 backdrop-blur">
             <p className="font-semibold">We couldn&apos;t load nearby partners.</p>
             <button
               type="button"
               onClick={handleRefresh}
-              className="mt-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              className="mt-2 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
             >
               Try again
             </button>
@@ -1370,13 +2198,15 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       )}
 
       {!isLoading && !loadError && nearbyCount === 0 && (
-        <div className="absolute inset-0 z-[1100] flex items-center justify-center">
-          <div className="pointer-events-auto max-w-sm rounded-3xl border border-white/10 bg-white/5 px-6 py-8 text-center text-white backdrop-blur-2xl shadow-2xl">
-            <h3 className="text-lg font-semibold">No partners nearby yet</h3>
-            <p className="mt-2 text-sm text-white/70">Adjust your availability window or refresh to widen the search.</p>
+        <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-[#0b0f24]/80 backdrop-blur">
+          <div className="pointer-events-auto max-w-sm rounded-3xl border border-white/10 bg-white/10 px-6 py-8 text-center text-slate-200 shadow-2xl shadow-black/40">
+            <h3 className="text-lg font-semibold text-white">No partners nearby yet</h3>
+            <p className="mt-2 text-sm text-slate-300">
+              Adjust your availability window or refresh to widen the search.
+            </p>
             <Button
               onClick={handleRefresh}
-              className="mt-4 rounded-full bg-white/90 text-slate-900 hover:bg-white"
+              className="mt-4 rounded-full bg-gradient-to-r from-[#ff5f6d] via-[#c850c0] to-[#4158d0] px-6 text-sm font-semibold text-white shadow-lg hover:opacity-90"
             >
               Refresh search
             </Button>
@@ -1385,13 +2215,27 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       )}
 
       {isAvailabilityModalOpen && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 animate-fade-in">
-          <div
-            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md"
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[2000] flex items-center justify-center p-4"
+        >
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => setIsAvailabilityModalOpen(false)}
           />
 
-          <div className="relative w-full max-w-md rounded-[32px] border border-white/10 bg-[#0b122a]/95 px-6 py-7 text-white shadow-[0_45px_120px_rgba(5,6,24,0.65)] backdrop-blur-[32px] sm:px-8">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="relative w-full max-w-md rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-6 py-7 text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] sm:px-8"
+          >
             <div className="flex items-start justify-between gap-6">
               <div>
                 <p className="text-xs uppercase tracking-[0.35em] text-white/40">Set Availability</p>
@@ -1685,87 +2529,455 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                   ? "Set as Available"
                   : "Set as Unavailable"}
               </Button>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
 
-      <div
-        className={`absolute top-4 left-4 right-4 z-[1000] pointer-events-none transition-opacity duration-300 ${
-          isProfileOpen ? "opacity-0" : "opacity-100"
-        }`}
-        aria-hidden={isProfileOpen}
-      >
-        <div className="flex items-center justify-between">
-        <Button
-          size="icon"
-            className="glass-button h-12 w-12 rounded-full pointer-events-auto"
-          onClick={() => setIsFilterOpen(true)}
-        >
-          <Filter className="h-5 w-5 text-white" />
-        </Button>
-
-          <div className="glass-button pointer-events-auto flex items-center gap-2 rounded-full px-4 py-2">
-          <Users className="h-4 w-4 text-white" />
-            <span className="text-sm font-semibold text-white">{nearbyCount} nearby</span>
-        </div>
-
-        <Button
-          size="icon"
-            className={`pointer-events-auto h-12 w-12 rounded-full transition-all shadow-lg ${
-            isAvailable
-                ? "animate-pulse-slow bg-gradient-to-br from-green-400 to-emerald-500 hover:from-green-500 hover:to-emerald-600"
-              : "glass-button"
-          }`}
-          onClick={() => setIsAvailabilityModalOpen(true)}
-        >
-            <Zap className="h-5 w-5 text-white" />
-        </Button>
-        </div>
-
-        <div className="pointer-events-auto mt-4 flex justify-center">
-          <LayoutGroup>
-            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-2 backdrop-blur">
-              {MAP_FILTERS.map((filter) => {
-                const isActive = activeMapFilter === filter.id
-                return (
-                  <motion.button
-                    key={filter.id}
-                    type="button"
-                    onClick={() => setActiveMapFilter(filter.id)}
-                    className="relative flex flex-col items-center rounded-full px-3 py-1.5 text-center text-white/70 transition hover:text-white"
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    {isActive && (
-                      <motion.span
-                        layoutId="map-filter-pill"
-                        className="absolute inset-0 rounded-full bg-white/15"
-                        transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                      />
+      <div className="relative flex h-full w-full overflow-hidden">
+        <AnimatePresence initial={false}>
+          {sidebarTargetWidth > 0 && (
+            <motion.aside
+              initial={false}
+              animate={{
+                width: isSidebarExpanded ? sidebarTargetWidth : 60,
+                paddingLeft: isSidebarExpanded ? 20 : 8,
+                paddingRight: isSidebarExpanded ? 20 : 8,
+              }}
+              transition={{ type: "spring", stiffness: 260, damping: 30 }}
+              style={{
+                width: isSidebarExpanded ? sidebarTargetWidth : 60,
+                paddingLeft: isSidebarExpanded ? 20 : 8,
+                paddingRight: isSidebarExpanded ? 20 : 8,
+              }}
+              className="group/sidebar hidden h-full flex-shrink-0 flex-col justify-between rounded-r-2xl border-r border-white/8 bg-[rgba(18,18,24,0.65)] py-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[14px] md:flex"
+            >
+              <div className="space-y-6">
+                <div className="relative">
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 shadow-[0_12px_30px_rgba(0,0,0,0.35)] transition-all duration-200 hover:bg-white/10",
+                      !isSidebarExpanded && "justify-center"
                     )}
-                    <span className="relative text-lg leading-none">{filter.icon}</span>
-                    <span className="relative mt-1 text-[10px] font-semibold uppercase tracking-[0.25em]">
-                      {filter.label}
-                    </span>
-                  </motion.button>
-                )
-              })}
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#2cb1bc] text-sm font-semibold uppercase tracking-[0.2em] text-white shadow-[0_10px_20px_rgba(124,58,237,0.35)]">
+                      plas
+                    </div>
+                    {isSidebarExpanded && (
+                      <div className="text-left">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-white/50">Your hub</p>
+                        <p className="text-sm font-semibold text-white">Plas</p>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+                    className="absolute -right-3 top-1 flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/70 shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-white/10"
+                    aria-label={isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+                  >
+                    {isSidebarExpanded ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+                <nav className="space-y-2">{renderSidebarNavItems(isSidebarExpanded)}</nav>
+              </div>
+              <SidebarUserCard showLabels={isSidebarExpanded} />
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
+        <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="sticky top-4 z-[1201] mx-4 rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-4 py-3 shadow-[0_12px_26px_rgba(0,0,0,0.5)] backdrop-blur-[14px] transition-all md:mx-6 lg:mx-8">
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="relative flex-1">
+              <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/50">
+                      <Search className="h-4 w-4" />
+                    </div>
+                    <input
+                value={displayCity ?? ""}
+                      readOnly
+                className="w-full rounded-full border border-white/10 bg-[rgba(20,20,30,0.65)] py-2 pl-10 pr-3 text-xs font-medium text-white placeholder:text-white/50 shadow-[0_4px_15px_rgba(0,0,0,0.35)] outline-none transition-all hover:bg-[rgba(20,20,30,0.75)] focus:border-white/20 focus:bg-[rgba(20,20,30,0.75)]"
+                placeholder="Search language partners or cities…"
+                aria-label="Search partners"
+                    />
+                  </div>
+
+        <Button
+              onClick={() => setIsAvailabilityModalOpen(true)}
+              className="hidden items-center gap-2 rounded-full bg-gradient-to-r from-[#7c3aed] to-[#a855f7] px-3 py-2 text-xs font-semibold text-white shadow-lg hover:opacity-90 sm:inline-flex"
+                      title="Set availability"
+        >
+              <Zap className="h-3.5 w-3.5" />
+              Set availability
+        </Button>
+
+            <Button
+              onClick={() => setIsAvailabilityModalOpen(true)}
+              className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#7c3aed] to-[#a855f7] px-3 py-2 text-xs font-semibold text-white shadow-lg hover:opacity-90 sm:hidden"
+              title="Set availability"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              Live
+            </Button>
+
+                    <Button
+                      onClick={() => setIsFilterOpen(true)}
+                      variant="outline"
+              className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-[rgba(99,102,241,0.7)] px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-[rgba(99,102,241,0.85)]"
+                      title="Filters"
+                    >
+              <Settings className="h-3.5 w-3.5" />
+                      Filters
+        </Button>
+
+                        <button
+                          type="button"
+                    onClick={() => setActiveSidebarItem("settings")}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition hover:bg-white/15"
+                    aria-label="Open settings"
+                    title="Settings"
+                        >
+              <Settings className="h-4 w-4" />
+                        </button>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                  className="flex items-center gap-2 rounded-full border border-white/10 bg-[rgba(20,20,30,0.6)] py-1 pl-1 pr-3 text-left text-xs text-white shadow-[0_4px_15px_rgba(0,0,0,0.35)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.75)]"
+                      >
+                  <Avatar className="h-8 w-8 border border-white/10">
+                          <AvatarImage src={viewerAvatarUrl} alt={viewerDisplayName} />
+                    <AvatarFallback className="bg-white/10 text-white text-xs">
+                            {viewerInitials.slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="hidden flex-col lg:flex">
+                    <span className="text-xs font-semibold leading-tight">{viewerDisplayName}</span>
+                    <span className="text-[10px] text-white/60">Active explorer</span>
+                        </div>
+                  <ChevronDown className="hidden h-3.5 w-3.5 text-white/60 lg:block" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                className="w-48 border border-white/10 bg-[#1a1d32]/95 text-white shadow-xl shadow-black/40"
+                    >
+                      <DropdownMenuItem>View Profile</DropdownMenuItem>
+                      <DropdownMenuItem>Notifications</DropdownMenuItem>
+                      <DropdownMenuItem>Settings</DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-white/10" />
+                      <DropdownMenuItem className="text-rose-400">Logout</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
             </div>
-          </LayoutGroup>
-        </div>
-        <p className="pointer-events-none mt-2 text-center text-[11px] text-white/55">
+          </header>
+
+          <div className="flex flex-1 flex-col gap-6 overflow-hidden px-4 pb-6 pt-4 md:px-8 md:pb-8 md:pt-6 lg:px-10">
+            <div className="flex flex-1 flex-col gap-6 xl:flex-row xl:gap-[1px] xl:overflow-hidden">
+              <AnimatePresence initial={false}>
+                {!isLeftPanelCollapsed && (
+                  <motion.div
+                    key="left-content-panel"
+                    initial={{ x: -32, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: -32, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    className="relative flex w-full flex-col gap-6 xl:max-w-[520px] xl:overflow-hidden xl:pr-2"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setIsLeftPanelCollapsed(true)}
+                      className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 shadow-[0_6px_20px_rgba(0,0,0,0.35)] transition hover:bg-white/10"
+                      aria-label="Collapse left panel"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeSidebarItem}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -16 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    className="flex h-full flex-col gap-6"
+                  >
+                    {sidebarContent}
+                  </motion.div>
+                </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="relative flex-1">
+                {isLeftPanelCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => setIsLeftPanelCollapsed(false)}
+                    className="pointer-events-auto absolute top-6 left-6 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 shadow-[0_6px_20px_rgba(0,0,0,0.35)] transition hover:bg-white/10"
+                    aria-label="Expand left panel"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                )}
+              <div className="relative h-full w-full overflow-hidden rounded-3xl border border-white/10 bg-[rgba(12,15,34,0.78)] shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-[18px]">
+                  <div className="absolute inset-0">
+                    <MapboxMap
+                      users={usersForMap}
+                      pois={filteredPois}
+                      activeFilter={activeMapFilter}
+                      onUserClick={(user) => handleUserSelect(user as MapUser)}
+                      onPoiClick={setSelectedPoi}
+                      currentUserLocation={effectiveUserLocation}
+                      centerOffset={centerOffset}
+                      onMapReady={(map) => {
+                        mapInstanceRef.current = map
+                      }}
+                    />
+              </div>
+
+                <div className="pointer-events-none absolute inset-0">
+                  <div className="absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2">
+                    <div className="relative h-40 w-40">
+                      <span className="absolute inset-0 rounded-full border border-sky-400/40 bg-sky-400/5" />
+                      {[0, 1, 2].map((index) => (
+                        <span
+                          // eslint-disable-next-line react/no-array-index-key
+                          key={index}
+                          className={cn(
+                            "absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-300/60",
+                            "animate-[pulseRing_4s_linear_infinite]"
+                          )}
+                          style={{
+                            animationDelay: `${index * 1.1}s`,
+                          }}
+                        />
+                      ))}
+                      <span className="absolute inset-0 h-full w-full rounded-full">
+                        <span className="absolute left-1/2 top-1/2 h-[180%] w-[6px] -translate-x-1/2 -translate-y-[90%] origin-bottom rounded-full bg-gradient-to-b from-sky-300/0 via-sky-300/40 to-sky-500/70 blur-[1px] animate-[radarSweep_6s_linear_infinite]" />
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    className="absolute inset-0 opacity-35"
+                    style={{
+                      backgroundImage:
+                        "repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 80px), repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 80px)",
+                    }}
+                  />
+
+                  <div className="flex items-center justify-between px-8 pt-8">
+                    <div className="pointer-events-auto inline-flex items-center gap-3 rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-5 py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
+                      <Compass className="h-4 w-4 text-indigo-300" />
+                      <span>{displayCity}, Netherlands</span>
+                    </div>
+                    <div className="pointer-events-auto flex items-center gap-3">
+                      <button className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)] hover:border-indigo-400">
+                        <MapPin className="h-5 w-5" />
+                      </button>
+                      <button className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)] hover:border-indigo-400">
+                        <Settings className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pointer-events-auto absolute top-14 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/8 bg-[rgba(20,20,30,0.6)] px-5 py-2 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
+                    <Users className="h-4 w-4 text-indigo-300" />
+                    <span>{nearbyCount} nearby</span>
+                  </div>
+
+                  <div className="pointer-events-none absolute top-32 left-1/2 -translate-x-1/2 text-xs font-semibold uppercase tracking-[0.3em] text-white/50">
           {MAP_FILTERS.find((filter) => filter.id === activeMapFilter)?.hint}
-        </p>
+                  </div>
+
+                  <div className="pointer-events-auto absolute bottom-12 left-12 flex flex-col gap-3">
+                    <button 
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]"
+                      title="Zoom in"
+                    >
+                      +
+                    </button>
+                    <button 
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]"
+                      title="Zoom out"
+                    >
+                      −
+                    </button>
+                  </div>
+                  <div className="pointer-events-auto absolute bottom-12 right-12">
+                    <motion.button
+                      onClick={recenterMap}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/8 bg-[rgba(99,102,241,0.8)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(99,102,241,0.9)] hover:border-white/15"
+                      title="Recenter map (R)"
+                    >
+                      <Compass className="h-5 w-5" />
+                    </motion.button>
+                  </div>
+
+                  {activeSidebarItem !== "discover" && (
+                    <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                      <div className="max-w-sm rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-6 py-6 text-center text-sm text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px]">
+                        <p className="text-sm font-semibold text-white">
+                          Switch back to Discover to explore the map.
+                        </p>
+                        <p className="mt-2 text-xs text-white/80">
+                          The map remains live in the background while you browse other sections.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <AnimatePresence>
+                    {activePreviewUser && (
+                      <motion.div
+                        key={activePreviewUser.id}
+                        initial={{ x: 48, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        exit={{ x: 48, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: "easeOut" }}
+                        className="pointer-events-auto absolute bottom-10 right-10 w-[420px] max-w-[min(420px,calc(100vw-40px))] rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-7 py-6 text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]"
+                      >
+                        <div className="absolute right-6 top-6 flex items-center gap-2">
+                          <motion.button
+                        type="button"
+                            onClick={handleTogglePreviewFavorite}
+                            whileTap={{ scale: 0.9 }}
+                            className={cn(
+                              "flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20",
+                              isPreviewFavorite && "text-rose-400",
+                            )}
+                        aria-label="Toggle favorite"
+                      >
+                            <Heart className={cn("h-5 w-5", isPreviewFavorite && "fill-current")} />
+                          </motion.button>
+                          <motion.button
+                          type="button"
+                            onClick={() => setActivePreviewUserId(null)}
+                            whileTap={{ scale: 0.9 }}
+                            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20"
+                            aria-label="Close preview"
+                          >
+                            <X className="h-5 w-5" />
+                          </motion.button>
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#f093fb] to-[#f5576c] text-2xl font-semibold text-white shadow-lg shadow-rose-500/40">
+                            {(activePreviewUser.name ?? "S").slice(0, 1)}
+                            {activePreviewUser.isOnline && (
+                            <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-black bg-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.7)]" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-xl font-semibold">{activePreviewUser.name ?? "Language Explorer"}</h3>
+                              <p className="mt-1 text-sm text-white/60">
+                                <span className="inline-flex items-center gap-1">
+                                  <MapPin className="h-4 w-4 text-rose-300" />
+                                    {activePreviewUser.distance} •{" "}
+                                    {activePreviewUser.availableNow ? "Online now" : "Responsive"}
+                                </span>
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-white/70">
+                                  {(activePreviewUser.learns ?? [])
+                                  .slice(0, 2)
+                                  .map((badge) => (
+                                    <span
+                                        key={`${activePreviewUser.id}-popup-learn-${badge.language}`}
+                                      className="inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-400/10 px-3 py-1"
+                                    >
+                                      {badge.flag} Learning {badge.language}
+                                    </span>
+                                  ))}
+                                  {(activePreviewUser.teaches ?? [])
+                                  .slice(0, 2)
+                                  .map((badge) => (
+                                    <span
+                                        key={`${activePreviewUser.id}-popup-teach-${badge.language}`}
+                                      className="inline-flex items-center gap-2 rounded-xl border border-sky-400/40 bg-sky-400/10 px-3 py-1"
+                                    >
+                                      {badge.flag} Teaching {badge.language}
+                                    </span>
+                                  ))}
+                              </div>
+                            </div>
+                          </div>
+                          <p className="mt-3 text-sm text-white/70">
+                              {activePreviewUser.availabilityMessage ??
+                                activePreviewUser.bio ??
+                                "Ready to connect for a language exchange."}
+                          </p>
+                        </div>
       </div>
 
-      <div className="absolute inset-0">
-        <MapboxMap
-          users={usersForMap}
-          pois={filteredPois}
-          activeFilter={activeMapFilter}
-          onUserClick={(user) => handleUserSelect(user as MapUser)}
-          onPoiClick={setSelectedPoi}
-          currentUserLocation={effectiveUserLocation}
-        />
+                      <div className="mt-5 grid grid-cols-4 gap-4 border-y border-white/10 py-4 text-center text-sm">
+                        <div>
+                          <p className="text-lg font-bold text-indigo-300">
+                              {Number.isFinite(activePreviewUser.rating) ? activePreviewUser.rating.toFixed(1) : "4.9"}
+                          </p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Rating</p>
+                        </div>
+                        <div>
+                          <p className="text-lg font-bold text-indigo-300">
+                              {activePreviewUser.stats?.find((stat) => /trade|exchange/i.test(stat.label))?.value ?? "23"}
+                          </p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Exchanges</p>
+                        </div>
+                        <div>
+                          <p className="text-lg font-bold text-indigo-300">
+                              {Math.round(activePreviewUser.matchScore ?? 85)}%
+                          </p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Match</p>
+                        </div>
+                        <div>
+                          <p className="text-lg font-bold text-indigo-300">
+                              {activePreviewUser.stats?.find((stat) => /streak/i.test(stat.label))?.value ?? "6mo"}
+                          </p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Member</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">About</p>
+                        <p className="mt-2 text-sm text-white/80">
+                            {activePreviewUser.bio ??
+                            "Language enthusiast ready to connect. Coffee chats are my favourite way to practice!"}
+                        </p>
+                      </div>
+
+                      <div className="mt-5 flex gap-3">
+                          <motion.button
+                          type="button"
+                            whileTap={{ scale: 0.97 }}
+                          onClick={() => {
+                              const mapIndex = mapUsers.findIndex((candidate) => candidate.id === activePreviewUser.id)
+                            if (mapIndex !== -1) {
+                              openProfileAtIndex(mapIndex)
+                            }
+                          }}
+                          className="flex-1 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-white/20"
+                        >
+                          View Profile
+                          </motion.button>
+                          <motion.button
+                          type="button"
+                            whileTap={{ scale: 0.97 }}
+                            onClick={handlePreviewChat}
+                          className="flex-1 rounded-xl bg-gradient-to-r from-[#667eea] to-[#764ba2] px-4 py-3 text-center text-sm font-semibold text-white shadow-lg shadow-indigo-500/40 transition hover:opacity-90"
+                        >
+                          💬 Chat Now
+                          </motion.button>
+                      </div>
+                      </motion.div>
+                  )}
+                  </AnimatePresence>
+                </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <AnimatePresence>
@@ -1777,6 +2989,13 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[2500]"
+          >
+            <motion.div
+              initial={{ x: "100%", opacity: 0, scale: 0.95 }}
+              animate={{ x: 0, opacity: 1, scale: 1 }}
+              exit={{ x: "100%", opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="h-full w-full"
           >
             <ProfileCard
               profiles={profileCardProfiles}
@@ -1793,6 +3012,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
               isMessagePending={isOpeningChat}
               isInvitePending={isInviting}
             />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1807,12 +3027,12 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
             transition={{ duration: 0.28, ease: "easeOut" }}
             className="pointer-events-none fixed inset-x-0 bottom-0 z-[2100] px-4 pb-6"
           >
-            <div className="pointer-events-auto mx-auto w-full max-w-md rounded-[28px] border border-white/10 bg-[#0b122a]/95 px-6 py-6 text-white shadow-[0_40px_120px_rgba(5,6,24,0.75)] backdrop-blur-xl">
+            <div className="pointer-events-auto mx-auto w-full max-w-md rounded-t-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-6 py-6 text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px]">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">{selectedPoi.emoji}</span>
                   <div>
-                    <h3 className="text-lg font-semibold">{selectedPoi.title}</h3>
+                    <h3 className="text-lg font-semibold text-white">{selectedPoi.title}</h3>
                     {selectedPoi.subtitle && (
                       <p className="text-sm text-white/60">{selectedPoi.subtitle}</p>
                     )}
@@ -1821,7 +3041,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                 <button
                   type="button"
                   onClick={() => setSelectedPoi(null)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/70 transition hover:bg-white/10"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-[rgba(20,20,30,0.6)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)] hover:border-white/15"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -1831,7 +3051,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                 {selectedPoi.languages.map((language) => (
                   <span
                     key={`${selectedPoi.id}-${language}`}
-                    className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-100"
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-white/70"
                   >
                     {language}
                   </span>
@@ -1844,20 +3064,20 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
               {selectedPoi.time && (
                 <div className="mt-4 flex items-center gap-2 text-xs text-white/60">
-                  <CalendarCheck className="h-4 w-4 text-emerald-300" />
+                  <CalendarCheck className="h-4 w-4 text-sky-300" />
                   <span>{selectedPoi.time}</span>
                 </div>
               )}
 
               <div className="mt-6 flex items-center justify-between gap-3">
-                <div className="text-xs text-white/50">
+                <div className="text-xs text-white/60">
                   <p>Tap Join to RSVP and notify your circle.</p>
-                  <p className="mt-1 flex items-center gap-1 text-white/40">
-                    <MessageCircle className="h-3.5 w-3.5" />
+                  <p className="mt-1 flex items-center gap-1 text-white/50">
+                    <MessageCircle className="h-3.5 w-3.5 text-sky-300" />
                     <span>Chats unlock 30 minutes before start.</span>
                   </p>
                 </div>
-                <Button className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-semibold text-emerald-950 shadow-lg transition hover:bg-emerald-400">
+                <Button className="rounded-full bg-sky-500 px-5 py-2 text-sm font-semibold text-white shadow-lg transition-all hover:bg-sky-600">
                   Join
                 </Button>
               </div>
@@ -1865,6 +3085,92 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* People Bottom Sheet */}
+      <AnimatePresence>
+        {isPeoplePanelOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[2200] bg-black/40 backdrop-blur-sm"
+              onClick={() => setIsPeoplePanelOpen(false)}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="fixed inset-x-0 bottom-0 z-[2201] max-h-[85vh] overflow-hidden rounded-t-2xl border-t border-white/8 bg-[rgba(20,20,30,0.6)] shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px]"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+                <h2 className="text-xl font-semibold text-white">People</h2>
+                <button
+                  type="button"
+                  onClick={() => setIsPeoplePanelOpen(false)}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-[rgba(20,20,30,0.6)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)] hover:border-white/15"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="overflow-y-auto px-6 py-6">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredUsers.slice(0, 12).map((user) => {
+                    const matchValue = Math.round(user.matchScore ?? 80)
+                    const ratingValue = Number.isFinite(user.rating) ? user.rating.toFixed(1) : "4.8"
+                    return (
+                      <motion.div
+                        key={user.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        whileHover={{ scale: 1.02 }}
+                        onClick={() => {
+                          handleUserSelect(user)
+                          setIsPeoplePanelOpen(false)
+                        }}
+                        className="cursor-pointer rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)] hover:border-white/15"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#667eea] to-[#764ba2] text-lg font-semibold text-white shadow-lg shadow-indigo-500/40">
+                            {(user.name ?? "L").slice(0, 1)}
+                            {user.isOnline && (
+                              <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#1b1b29] bg-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.8)]" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <h3 className="truncate text-base font-semibold text-white">{user.name ?? "Language Explorer"}</h3>
+                                <p className="mt-1 flex items-center gap-1 text-xs text-white/60">
+                                  <MapPin className="h-3 w-3 text-rose-300" />
+                                  {user.distance}
+                                </p>
+                              </div>
+                              <span className="rounded-lg bg-gradient-to-r from-emerald-400 to-emerald-600 px-2 py-1 text-xs font-bold text-white">
+                                {matchValue}%
+                              </span>
+                            </div>
+                            <p className="mt-2 line-clamp-2 text-sm text-white/70">
+                              {user.availabilityMessage ?? user.bio ?? "Ready to connect for a language exchange."}
+                            </p>
+                            <div className="mt-2 flex items-center gap-2 text-xs text-white/50">
+                              <Star className="h-3 w-3 text-amber-300" />
+                              {ratingValue}
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
     </div>
   )
 }
+

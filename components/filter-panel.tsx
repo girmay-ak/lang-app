@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -65,9 +66,27 @@ export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
 
   return (
     <>
-      <div className="fixed inset-0 z-[3200] bg-gradient-to-br from-[#0c0d14f2] via-[#101224d9] to-[#0d101d] backdrop-blur-[10px]" />
-      <div className="fixed inset-0 z-[3201] flex items-center justify-center px-4 py-10 sm:px-8">
-        <div className="relative flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/12 bg-[#1A1A1A]/95 shadow-[0_60px_140px_rgba(5,8,25,0.7)]">
+      <motion.div
+        className="fixed inset-0 z-[3200] bg-gradient-to-br from-[#0c0d14f2] via-[#101224d9] to-[#0d101d] backdrop-blur-[10px]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      <motion.div
+        className="fixed inset-0 z-[3201] flex items-center justify-center px-4 py-10 sm:px-8"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+      >
+        <motion.div
+          className="relative flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/12 bg-[#1A1A1A]/95 shadow-[0_60px_140px_rgba(5,8,25,0.7)]"
+          initial={{ y: 32, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 32, opacity: 0 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+        >
           <div className="flex items-start justify-between border-b border-white/10 px-8 py-7">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/45">Explorer Toolkit</p>
@@ -478,8 +497,8 @@ export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
               </Button>
             </div>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </>
   )
 }
