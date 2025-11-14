@@ -454,6 +454,8 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     "discover",
   )
   const [isPeoplePanelOpen, setIsPeoplePanelOpen] = useState(false)
+  const [conversations, setConversations] = useState<any[]>([])
+  const [loadingChats, setLoadingChats] = useState(true)
   const mapInstanceRef = useRef<any>(null)
 
   const isSidebarExpanded = !isSidebarCollapsed
@@ -581,6 +583,30 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     }
     return combined
   }, [currentUserProfile])
+
+  // Fetch conversations for messages view
+  useEffect(() => {
+    if (activeSidebarItem !== "messages") return
+    
+    const fetchConversations = async () => {
+      try {
+        setLoadingChats(true)
+        const summaries = await chatService.getConversationSummaries()
+        setConversations(summaries)
+      } catch (error) {
+        console.error("Error fetching conversations:", error)
+        toast({
+          title: "Failed to load conversations",
+          description: "Please try again later",
+          variant: "destructive",
+        })
+      } finally {
+        setLoadingChats(false)
+      }
+    }
+
+    fetchConversations()
+  }, [activeSidebarItem, toast])
 
   const mapUsers = useMemo<MapUser[]>(() => {
     const viewerLanguageSet = new Set(viewerLanguages.map((lang) => lang.language.toLowerCase()))
@@ -1881,43 +1907,116 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     }
 
     if (activeSidebarItem === "messages") {
+
+      const formatTimeAgo = (dateStr: string | null) => {
+        if (!dateStr) return ""
+        const date = new Date(dateStr)
+        const now = new Date()
+        const diff = now.getTime() - date.getTime()
+        const minutes = Math.floor(diff / 60000)
+        const hours = Math.floor(minutes / 60)
+        const days = Math.floor(hours / 24)
+        
+        if (minutes < 1) return "Just now"
+        if (minutes < 60) return `${minutes}m ago`
+        if (hours < 24) return `${hours}h ago`
+        if (days < 7) return `${days}d ago`
+        return date.toLocaleDateString()
+      }
+
+      const getStatusInfo = (lastMessageAt: string | null) => {
+        if (!lastMessageAt) return { text: "NEW CONVERSATION", color: "text-[#7B42F6]" }
+        const diff = new Date().getTime() - new Date(lastMessageAt).getTime()
+        const minutes = Math.floor(diff / 60000)
+        if (minutes < 5) return { text: "TYPING...", color: "text-[#3CEAD7]" }
+        if (minutes < 60) return { text: "REPLIED", color: "text-emerald-300" }
+        return { text: "DELIVERED", color: "text-white/50" }
+      }
+
       return (
-        <div className="glass-panel p-6">
-          <div className="flex items-center justify-between gap-3">
+        <div className="glass-panel p-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-6 pt-6 pb-4 border-b border-white/8">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#A6A9B7]">Inbox</p>
-              <h2 className="mt-2 text-xl font-semibold text-white">Recent conversations</h2>
+              <h2 className="mt-1 text-lg font-bold text-white">Recent conversations</h2>
             </div>
-                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button
-              variant="outline"
-              className="rounded-full border border-white/8 bg-[rgba(99,102,241,0.8)] px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-[rgba(99,102,241,0.9)] hover:border-white/15"
-            >
-              Open full chat
-            </Button>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="outline"
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white transition-all hover:bg-white/10"
+              >
+                Open full chat
+              </Button>
             </motion.div>
           </div>
-          <div className="mt-5 space-y-3">
-            {SIDEBAR_SAMPLE_MESSAGES.map((message) => (
-              <motion.button
-                key={message.id}
-                whileTap={{ scale: 0.97 }}
-                whileHover={{ scale: 1.02 }}
-                onClick={() => setActiveSidebarItem("discover")}
-                className="glass-card w-full px-4 py-3 text-left text-sm text-white"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-white">{message.name}</p>
-                    <p className="text-xs text-white/60">{message.languagePair}</p>
-                  </div>
-                  <span className="text-xs text-white/40">{message.time}</span>
-                </div>
-                <p className="mt-2 text-sm text-white/70">{message.preview}</p>
-                <p className="mt-2 text-xs uppercase tracking-[0.2em] text-emerald-300">{message.status}</p>
-              </motion.button>
-            ))}
-          </div>
+          
+          {loadingChats ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-[#7B42F6]" />
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="px-6 py-12 text-center">
+              <MessageCircle className="mx-auto h-12 w-12 text-white/20" />
+              <p className="mt-4 text-sm font-semibold text-white">No conversations yet</p>
+              <p className="mt-1 text-xs text-white/50">Start chatting with language partners!</p>
+            </div>
+          ) : (
+            <div className="max-h-[600px] overflow-y-auto px-4 py-4 space-y-2">
+              {conversations.map((conv) => {
+                const status = getStatusInfo(conv.lastMessageAt)
+                return (
+                  <motion.button
+                    key={conv.conversationId}
+                    whileTap={{ scale: 0.98 }}
+                    whileHover={{ scale: 1.01 }}
+                    onClick={() => {
+                      // TODO: Open chat modal or navigate to chat page
+                      console.log("Open conversation:", conv.conversationId)
+                    }}
+                    className="glass-card w-full p-4 text-left transition-all relative overflow-hidden group"
+                  >
+                    {conv.unreadCount > 0 && (
+                      <div className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-[10px] font-bold text-white shadow-[0_0_12px_rgba(123,66,246,0.5)]">
+                        {conv.unreadCount > 9 ? "9+" : conv.unreadCount}
+                      </div>
+                    )}
+                    
+                    <div className="flex items-start gap-3">
+                      <div className="relative flex-shrink-0">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-sm font-bold text-white shadow-[0_0_12px_rgba(123,66,246,0.3)]">
+                          {conv.avatar ? (
+                            <img src={conv.avatar} alt={conv.name} className="h-full w-full rounded-full object-cover" />
+                          ) : (
+                            conv.name.slice(0, 2).toUpperCase()
+                          )}
+                        </div>
+                        {conv.online && (
+                          <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#0B0F19] bg-[#3CEAD7] shadow-[0_0_8px_rgba(60,234,215,0.6)]" />
+                        )}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between gap-2 mb-1">
+                          <p className="text-sm font-bold text-white truncate">{conv.name}</p>
+                          <span className="text-[10px] text-white/40 whitespace-nowrap">
+                            {formatTimeAgo(conv.lastMessageAt)}
+                          </span>
+                        </div>
+                        
+                        <p className="text-xs text-white/50 mb-2 line-clamp-2">
+                          {conv.lastMessage || "Start a conversation..."}
+                        </p>
+                        
+                        <p className={`text-[10px] font-semibold uppercase tracking-[0.15em] ${status.color}`}>
+                          {status.text}
+                        </p>
+                      </div>
+                    </div>
+                  </motion.button>
+                )
+              })}
+            </div>
+          )}
         </div>
       )
     }
