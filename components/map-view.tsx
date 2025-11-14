@@ -541,7 +541,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
     const updateSidebarState = () => {
       const width = window.innerWidth
-      const baseWidth = width >= 1024 ? 240 : width >= 768 ? 200 : 0
+      const baseWidth = width >= 1024 ? 70 : width >= 768 ? 70 : 0
       setSidebarTargetWidth(baseWidth)
       setIsSidebarCollapsed((prev) => (width < 1024 ? true : prev))
       if (width >= 768) {
@@ -2014,20 +2014,19 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
             setActiveSidebarItem(item.id)
             onItemClick?.()
           }}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
           className={cn(
-            "group relative flex w-full items-center gap-3 overflow-visible rounded-xl px-3 py-3 text-sm font-semibold transition-all",
+            "group relative flex w-full items-center justify-center rounded-xl py-2.5 transition-all",
             isActive
-              ? "bg-white/10 text-white shadow-[0_4px_12px_rgba(123,66,246,0.2)]"
+              ? "bg-white/10 text-white"
               : "text-white/60 hover:bg-white/5 hover:text-white",
-            !showLabels && "justify-center px-3",
           )}
         >
           {isActive && (
             <motion.span
               layoutId="sidebar-active-indicator"
-              className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-1 rounded-r-full bg-gradient-to-b from-[#7B42F6] to-[#5430F0]"
+              className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-[3px] rounded-r-full bg-gradient-to-b from-[#7B42F6] to-[#5430F0]"
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
             />
           )}
@@ -2041,63 +2040,20 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
           >
             <Icon className={cn("h-5 w-5")} strokeWidth={isActive ? 2.5 : 2} />
           </span>
-          {showLabels && (
-            <span
-              className={cn(
-                "text-sm font-semibold transition-all duration-200",
-                isActive ? "text-white" : "text-white/60 group-hover:text-white"
-              )}
-            >
-              {item.label}
-            </span>
-          )}
-          {!showLabels && (
-            <span className="pointer-events-none absolute left-full top-1/2 ml-3 flex -translate-y-1/2 translate-x-0 items-center rounded-full border border-white/10 bg-[rgba(20,20,30,0.9)] px-3 py-1 text-xs font-semibold text-white opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.45)] transition group-hover:translate-x-1 group-hover:opacity-100">
-              {item.label}
-            </span>
-          )}
+          <span className="pointer-events-none absolute left-full top-1/2 ml-3 flex -translate-y-1/2 translate-x-0 items-center whitespace-nowrap rounded-xl border border-white/10 bg-[rgba(10,10,20,0.95)] px-3 py-1.5 text-xs font-semibold text-white opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-all group-hover:translate-x-1 group-hover:opacity-100 z-50">
+            {item.label}
+          </span>
         </motion.button>
       )
     })
 
   const SidebarUserCard = ({ showLabels }: { showLabels: boolean }) => {
-    if (showLabels) {
-      return (
-        <div className="mx-4 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-sm backdrop-blur-md">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-sm font-bold text-white shadow-[0_0_16px_rgba(123,66,246,0.3)]">
-              {viewerInitials.slice(0, 2)}
-              <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-[#0B0F19] bg-[#3CEAD7] shadow-[0_0_8px_rgba(60,234,215,0.6)]" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white truncate">{viewerMarker?.name ?? "Araya"}</p>
-              <p className="text-xs text-[#A6A9B7] truncate">Ready to connect</p>
-            </div>
-          </div>
-          <Button
-            onClick={() => setIsAvailabilityModalOpen(true)}
-            className="w-full h-10 rounded-xl bg-gradient-to-r from-[#7B42F6] to-[#5430F0] text-sm font-semibold text-white hover:opacity-90 shadow-[0_0_8px_rgba(123,66,246,0.3)] hover:shadow-[0_0_16px_rgba(123,66,246,0.5)] transition-all"
-          >
-            Set availability
-          </Button>
-        </div>
-      )
-    }
-
     return (
-      <div className="flex flex-col items-center gap-3 mx-4 rounded-2xl border border-white/10 bg-white/5 p-3">
-        <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-sm font-bold text-white shadow-[0_0_16px_rgba(123,66,246,0.3)]">
+      <div className="flex flex-col items-center gap-3 px-2 pb-2">
+        <div className="relative flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-sm font-bold text-white shadow-[0_0_16px_rgba(123,66,246,0.3)]">
           {viewerInitials.slice(0, 2)}
           <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0B0F19] bg-[#3CEAD7] shadow-[0_0_8px_rgba(60,234,215,0.6)]" />
         </div>
-        <Button
-          onClick={() => setIsAvailabilityModalOpen(true)}
-          size="icon"
-          className="h-10 w-10 rounded-xl bg-gradient-to-r from-[#7B42F6] to-[#5430F0] text-white hover:opacity-90 shadow-[0_0_8px_rgba(123,66,246,0.3)] hover:shadow-[0_0_16px_rgba(123,66,246,0.5)] transition-all"
-          title="Set availability"
-        >
-          <Zap className="h-4 w-4" />
-        </Button>
       </div>
     )
   }
@@ -2541,42 +2497,19 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
               }}
               transition={{ type: "spring", stiffness: 260, damping: 30 }}
               style={{
-                width: isSidebarExpanded ? sidebarTargetWidth : 60,
-                paddingLeft: isSidebarExpanded ? 20 : 8,
-                paddingRight: isSidebarExpanded ? 20 : 8,
+                width: 70,
               }}
-              className="group/sidebar hidden h-full flex-shrink-0 flex-col justify-between rounded-r-[28px] border-r border-white/8 bg-white/[0.04] py-8 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[18px] md:flex"
+              className="group/sidebar hidden h-full w-[70px] flex-shrink-0 flex-col justify-between border-r border-white/8 bg-white/[0.04] py-6 shadow-[0_2px_12px_rgba(0,0,0,0.3)] backdrop-blur-[18px] md:flex"
             >
-              <div className="space-y-6 px-4">
-                <div className="relative pt-2">
-                  <div
-                    className={cn(
-                      "flex items-center gap-3 transition-all duration-200",
-                      !isSidebarExpanded && "justify-center"
-                    )}
-                  >
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-lg font-bold uppercase tracking-wide text-white shadow-[0_0_20px_rgba(123,66,246,0.4)]">
-                      P
-                    </div>
-                    {isSidebarExpanded && (
-                      <div className="text-left">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-white/50">Your Hub</p>
-                        <p className="text-lg font-bold text-white">Plas</p>
-                      </div>
-                    )}
+              <div className="space-y-6 px-2">
+                <div className="relative flex justify-center pt-2 pb-4">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-base font-bold uppercase tracking-wide text-white shadow-[0_0_16px_rgba(123,66,246,0.4)]">
+                    P
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-                    className="absolute -right-6 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-[#0B0F19] text-white/70 shadow-lg transition hover:bg-[#1a1a1a] hover:text-white"
-                    aria-label={isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
-                  >
-                    {isSidebarExpanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                  </button>
                 </div>
-                <nav className="space-y-2">{renderSidebarNavItems(isSidebarExpanded)}</nav>
+                <nav className="space-y-1">{renderSidebarNavItems(false)}</nav>
               </div>
-              <SidebarUserCard showLabels={isSidebarExpanded} />
+              <SidebarUserCard showLabels={false} />
             </motion.aside>
           )}
         </AnimatePresence>
@@ -2668,8 +2601,8 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
           </div>
         </header>
 
-          <div className="flex flex-1 flex-col gap-6 overflow-hidden px-8 pb-8 pt-6">
-            <div className="flex flex-1 flex-col gap-6 xl:flex-row xl:gap-6 xl:overflow-hidden">
+          <div className="flex flex-1 flex-col gap-0 overflow-hidden">
+            <div className="flex flex-1 flex-col xl:flex-row xl:overflow-hidden">
               <AnimatePresence initial={false}>
                 {!isLeftPanelCollapsed && (
                   <motion.div
@@ -2678,7 +2611,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: -32, opacity: 0 }}
                     transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="relative flex w-full flex-col gap-5 xl:w-[560px] xl:flex-shrink-0 xl:overflow-hidden"
+                    className="relative flex w-full flex-col gap-5 border-r border-white/8 bg-white/[0.02] px-6 py-6 xl:w-[30%] xl:flex-shrink-0 xl:overflow-hidden backdrop-blur-sm"
                   >
                     <button
                       type="button"
@@ -2704,7 +2637,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                 )}
               </AnimatePresence>
 
-              <div className="relative flex-1">
+              <div className="relative flex-1 xl:w-[70%] px-6 py-6">
                 {isLeftPanelCollapsed && (
                   <button
                     type="button"
@@ -2715,7 +2648,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 )}
-              <div className="relative h-full w-full overflow-hidden rounded-3xl border border-white/10 bg-[rgba(12,15,34,0.78)] shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-[18px]">
+              <div className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/10 bg-[rgba(12,15,34,0.78)] shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-[18px]">
                   <div className="absolute inset-0">
                     <MapboxMap
                       users={usersForMap}
