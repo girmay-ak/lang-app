@@ -541,7 +541,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
     const updateSidebarState = () => {
       const width = window.innerWidth
-      const baseWidth = width >= 1024 ? 256 : width >= 768 ? 224 : 0
+      const baseWidth = width >= 1024 ? 240 : width >= 768 ? 200 : 0
       setSidebarTargetWidth(baseWidth)
       setIsSidebarCollapsed((prev) => (width < 1024 ? true : prev))
       if (width >= 768) {
@@ -1594,7 +1594,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     if (activeSidebarItem === "discover") {
       return (
         <>
-          <div className="rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-5 shadow-[0_6px_28px_rgba(0,0,0,0.45)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.72)]">
+          <div className="glass-panel p-6">
             <div className="flex flex-col gap-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -1694,24 +1694,24 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                 </button>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">
+              <div className="flex flex-wrap items-center gap-3 rounded-[20px] border border-white/10 bg-white/6 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60 backdrop-blur-[14px] shadow-sm">
                 <span className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5 text-emerald-300" />
+                  <Clock className="h-3.5 w-3.5 text-[#3CEAD7]" />
                   {filterAvailableNow ? "Showing available now" : "Showing all availability"}
                 </span>
                 <span className="flex items-center gap-2">
-                  <Users className="h-3.5 w-3.5 text-indigo-300" />
+                  <Users className="h-3.5 w-3.5 text-[#7B42F6]" />
                   {filteredUsers.length || nearbyCount} live
                 </span>
                 <span className="flex items-center gap-2">
-                  <Star className="h-3.5 w-3.5 text-amber-300" />
-                  Smart match score active
+                  <Star className="h-3.5 w-3.5 text-[#3CEAD7]" />
+                  Smart match score: active
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all">
+          <div className="glass-panel flex flex-1 flex-col overflow-hidden">
             <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
               <div className="text-sm font-semibold uppercase tracking-[0.3em] text-white">Nearby partners</div>
               <div className="text-xs font-semibold text-white/60">Sorted by distance</div>
@@ -1829,8 +1829,8 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     if (activeSidebarItem === "home") {
       return (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-200">Today</p>
+          <div className="glass-panel p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#7B42F6]">Today</p>
             <h2 className="mt-3 text-3xl font-semibold text-white">
               Keep the streak going, {viewerDisplayName.split(" ")[0] ?? "Explorer"}!
             </h2>
@@ -1853,8 +1853,8 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Next steps</p>
+          <div className="glass-panel p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#A6A9B7]">Next steps</p>
             <ul className="mt-4 space-y-3 text-sm text-white/70">
               <li className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-emerald-300">
@@ -1882,10 +1882,10 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
     if (activeSidebarItem === "messages") {
       return (
-        <div className="rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
+        <div className="glass-panel p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/50">Inbox</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#A6A9B7]">Inbox</p>
               <h2 className="mt-2 text-xl font-semibold text-white">Recent conversations</h2>
             </div>
                   <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -1904,7 +1904,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                 whileTap={{ scale: 0.97 }}
                 whileHover={{ scale: 1.02 }}
                 onClick={() => setActiveSidebarItem("discover")}
-                className="w-full rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-4 py-3 text-left text-sm text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)] hover:border-white/15"
+                className="glass-card w-full px-4 py-3 text-left text-sm text-white"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -1966,8 +1966,8 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     }
 
     return (
-      <div className="rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
-        <h2 className="text-xl font-semibold text-white">Quick settings</h2>
+      <div className="glass-panel p-6">
+        <h2 className="text-xl font-bold text-white">Quick settings</h2>
         <div className="mt-4 space-y-3">
           <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
             <p className="text-sm font-semibold text-white">Show me when I’m live</p>
@@ -2017,41 +2017,40 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           className={cn(
-            "group relative flex w-full items-center gap-3 overflow-visible rounded-2xl px-4 py-3 text-sm font-semibold transition-all",
+            "group relative flex w-full items-center gap-3 overflow-visible rounded-xl px-3 py-3 text-sm font-semibold transition-all",
             isActive
-              ? "text-white shadow-[0_12px_35px_rgba(79,70,229,0.35)]"
-              : "text-slate-300 hover:text-white",
-            showLabels ? "" : "md:px-0 md:py-3 md:justify-center",
+              ? "bg-white/10 text-white shadow-[0_4px_12px_rgba(123,66,246,0.2)]"
+              : "text-white/60 hover:bg-white/5 hover:text-white",
+            !showLabels && "justify-center px-3",
           )}
         >
           {isActive && (
             <motion.span
-              layoutId="sidebar-active-pill"
-              className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-r from-[rgba(130,70,255,0.3)] via-[rgba(255,130,255,0.15)] to-transparent"
-              transition={{ type: "spring", stiffness: 200, damping: 28 }}
+              layoutId="sidebar-active-indicator"
+              className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-1 rounded-r-full bg-gradient-to-b from-[#7B42F6] to-[#5430F0]"
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
             />
           )}
           <span
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg text-white shadow-inner shadow-black/30 transition-all duration-200",
+              "flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200",
               isActive
-                ? "border-transparent bg-gradient-to-br " +
-                  item.gradient +
-                  " text-slate-900 shadow-[0_10px_25px_rgba(99,102,241,0.45)]"
-                : "group-hover:border-transparent group-hover:bg-gradient-to-br group-hover:from-white/20 group-hover:to-white/5 group-hover:shadow-[0_0_18px_rgba(129,140,248,0.45)]",
+                ? "bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-white shadow-[0_0_12px_rgba(123,66,246,0.4)]"
+                : "bg-transparent text-white/70 group-hover:text-white",
             )}
           >
-            <Icon className={cn("h-5 w-5", isActive ? "text-slate-900" : "text-white/80")} />
+            <Icon className={cn("h-5 w-5")} strokeWidth={isActive ? 2.5 : 2} />
           </span>
-          <span
-            className={cn(
-              "text-left text-sm tracking-wide transition-all duration-200",
-              showLabels ? "md:block" : "md:hidden md:-translate-x-1 md:opacity-0",
-              "lg:block lg:translate-x-0 lg:opacity-100",
-            )}
-          >
-            {item.label}
-          </span>
+          {showLabels && (
+            <span
+              className={cn(
+                "text-sm font-semibold transition-all duration-200",
+                isActive ? "text-white" : "text-white/60 group-hover:text-white"
+              )}
+            >
+              {item.label}
+            </span>
+          )}
           {!showLabels && (
             <span className="pointer-events-none absolute left-full top-1/2 ml-3 flex -translate-y-1/2 translate-x-0 items-center rounded-full border border-white/10 bg-[rgba(20,20,30,0.9)] px-3 py-1 text-xs font-semibold text-white opacity-0 shadow-[0_12px_24px_rgba(0,0,0,0.45)] transition group-hover:translate-x-1 group-hover:opacity-100">
               {item.label}
@@ -2064,24 +2063,20 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   const SidebarUserCard = ({ showLabels }: { showLabels: boolean }) => {
     if (showLabels) {
       return (
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-lg shadow-black/30">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
-            You&apos;re set
-          </p>
-          <div className="mt-3 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
+        <div className="mx-4 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-sm backdrop-blur-md">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-sm font-bold text-white shadow-[0_0_16px_rgba(123,66,246,0.3)]">
               {viewerInitials.slice(0, 2)}
+              <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-[#0B0F19] bg-[#3CEAD7] shadow-[0_0_8px_rgba(60,234,215,0.6)]" />
             </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-white">{viewerMarker?.name ?? "You"}</p>
-              <p className="text-xs text-slate-300">
-                {viewerMarker?.availabilityMessage ?? "Set your availability to appear on the map."}
-              </p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white truncate">{viewerMarker?.name ?? "Araya"}</p>
+              <p className="text-xs text-[#A6A9B7] truncate">Ready to connect</p>
             </div>
           </div>
           <Button
             onClick={() => setIsAvailabilityModalOpen(true)}
-            className="mt-4 w-full rounded-full bg-gradient-to-r from-[#ff5f6d] via-[#c850c0] to-[#4158d0] text-sm font-semibold text-white hover:opacity-90"
+            className="w-full h-10 rounded-xl bg-gradient-to-r from-[#7B42F6] to-[#5430F0] text-sm font-semibold text-white hover:opacity-90 shadow-[0_0_8px_rgba(123,66,246,0.3)] hover:shadow-[0_0_16px_rgba(123,66,246,0.5)] transition-all"
           >
             Set availability
           </Button>
@@ -2090,14 +2085,15 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     }
 
     return (
-      <div className="flex flex-col items-center gap-3 rounded-3xl border border-white/10 bg-white/5 p-3 shadow-lg shadow-black/30">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
+      <div className="flex flex-col items-center gap-3 mx-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+        <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-sm font-bold text-white shadow-[0_0_16px_rgba(123,66,246,0.3)]">
           {viewerInitials.slice(0, 2)}
+          <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0B0F19] bg-[#3CEAD7] shadow-[0_0_8px_rgba(60,234,215,0.6)]" />
         </div>
         <Button
           onClick={() => setIsAvailabilityModalOpen(true)}
           size="icon"
-          className="h-10 w-10 rounded-full bg-gradient-to-r from-[#ff5f6d] via-[#c850c0] to-[#4158d0] text-white hover:opacity-90"
+          className="h-10 w-10 rounded-xl bg-gradient-to-r from-[#7B42F6] to-[#5430F0] text-white hover:opacity-90 shadow-[0_0_8px_rgba(123,66,246,0.3)] hover:shadow-[0_0_16px_rgba(123,66,246,0.5)] transition-all"
           title="Set availability"
         >
           <Zap className="h-4 w-4" />
@@ -2108,7 +2104,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#06091c]">
+    <div className="app-background relative h-full w-full overflow-hidden bg-gradient-to-b from-[#0B0F19] to-[#0F1421]">
       <style>{RADAR_ANIMATION_STYLES}</style>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.2),transparent_55%),radial-gradient(circle_at_bottom,rgba(16,185,129,0.12),transparent_60%)]" />
 
@@ -2234,7 +2230,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="relative w-full max-w-md rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-6 py-7 text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] sm:px-8"
+            className="glass-panel relative w-full max-w-md px-6 py-7 text-white sm:px-8"
           >
             <div className="flex items-start justify-between gap-6">
               <div>
@@ -2549,33 +2545,33 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                 paddingLeft: isSidebarExpanded ? 20 : 8,
                 paddingRight: isSidebarExpanded ? 20 : 8,
               }}
-              className="group/sidebar hidden h-full flex-shrink-0 flex-col justify-between rounded-r-2xl border-r border-white/8 bg-[rgba(18,18,24,0.65)] py-6 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[14px] md:flex"
+              className="group/sidebar hidden h-full flex-shrink-0 flex-col justify-between rounded-r-[28px] border-r border-white/8 bg-white/[0.04] py-8 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[18px] md:flex"
             >
-              <div className="space-y-6">
-                <div className="relative">
+              <div className="space-y-6 px-4">
+                <div className="relative pt-2">
                   <div
                     className={cn(
-                      "flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 shadow-[0_12px_30px_rgba(0,0,0,0.35)] transition-all duration-200 hover:bg-white/10",
+                      "flex items-center gap-3 transition-all duration-200",
                       !isSidebarExpanded && "justify-center"
                     )}
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#2cb1bc] text-sm font-semibold uppercase tracking-[0.2em] text-white shadow-[0_10px_20px_rgba(124,58,237,0.35)]">
-                      plas
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-lg font-bold uppercase tracking-wide text-white shadow-[0_0_20px_rgba(123,66,246,0.4)]">
+                      P
                     </div>
                     {isSidebarExpanded && (
                       <div className="text-left">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-white/50">Your hub</p>
-                        <p className="text-sm font-semibold text-white">Plas</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-white/50">Your Hub</p>
+                        <p className="text-lg font-bold text-white">Plas</p>
                       </div>
                     )}
                   </div>
                   <button
                     type="button"
                     onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-                    className="absolute -right-3 top-1 flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/70 shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition hover:bg-white/10"
+                    className="absolute -right-6 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-[#0B0F19] text-white/70 shadow-lg transition hover:bg-[#1a1a1a] hover:text-white"
                     aria-label={isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
                   >
-                    {isSidebarExpanded ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    {isSidebarExpanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </button>
                 </div>
                 <nav className="space-y-2">{renderSidebarNavItems(isSidebarExpanded)}</nav>
@@ -2586,58 +2582,57 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
         </AnimatePresence>
 
         <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="sticky top-4 z-[1201] mx-4 rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-4 py-3 shadow-[0_12px_26px_rgba(0,0,0,0.5)] backdrop-blur-[14px] transition-all md:mx-6 lg:mx-8">
-          <div className="flex items-center gap-2 md:gap-3">
-            <div className="relative flex-1">
-              <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/50">
-                      <Search className="h-4 w-4" />
-                    </div>
-                    <input
-                value={displayCity ?? ""}
-                      readOnly
-                className="w-full rounded-full border border-white/10 bg-[rgba(20,20,30,0.65)] py-2 pl-10 pr-3 text-xs font-medium text-white placeholder:text-white/50 shadow-[0_4px_15px_rgba(0,0,0,0.35)] outline-none transition-all hover:bg-[rgba(20,20,30,0.75)] focus:border-white/20 focus:bg-[rgba(20,20,30,0.75)]"
-                placeholder="Search language partners or cities…"
-                aria-label="Search partners"
-                    />
-                  </div>
+        <header className="sticky top-0 z-[1201] h-[72px] flex items-center border-b border-white/[0.06] bg-transparent px-8 shadow-sm backdrop-blur-[14px] transition-all">
+          <div className="flex w-full items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 rounded-[14px] border border-white/8 bg-white/8 px-4 py-2.5 text-sm font-medium text-white backdrop-blur-[10px] shadow-sm">
+                <MapPin className="h-4 w-4 text-[#3CEAD7]" />
+                <span>{displayCity ?? "Den Haag"}, Netherlands</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <div className="relative hidden lg:block">
+                <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/40">
+                  <Search className="h-4 w-4" />
+                </div>
+                <input
+                  value={displayCity ?? ""}
+                  readOnly
+                  className="h-11 w-[360px] rounded-[16px] border border-white/6 bg-white/6 pl-11 pr-4 text-sm font-medium text-white placeholder:text-white/40 outline-none transition-all hover:bg-white/8 focus:border-white/12 focus:bg-white/8 backdrop-blur-[10px]"
+                  placeholder="Search partners or cities…"
+                  aria-label="Search partners"
+                />
+              </div>
 
-        <Button
-              onClick={() => setIsAvailabilityModalOpen(true)}
-              className="hidden items-center gap-2 rounded-full bg-gradient-to-r from-[#7c3aed] to-[#a855f7] px-3 py-2 text-xs font-semibold text-white shadow-lg hover:opacity-90 sm:inline-flex"
-                      title="Set availability"
-        >
-              <Zap className="h-3.5 w-3.5" />
-              Set availability
-        </Button>
+              <Button
+                onClick={() => setIsAvailabilityModalOpen(true)}
+                className="hidden items-center gap-2 rounded-[14px] bg-gradient-to-r from-[#7B42F6] to-[#5430F0] px-6 py-2.5 text-sm font-semibold text-white shadow-[0_0_8px_rgba(123,66,246,0.3)] transition-all hover:shadow-[0_0_16px_rgba(123,66,246,0.5)] hover:scale-[1.02] sm:inline-flex"
+                title="Set availability"
+              >
+                <Zap className="h-4 w-4" />
+                Set availability
+              </Button>
 
-            <Button
-              onClick={() => setIsAvailabilityModalOpen(true)}
-              className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#7c3aed] to-[#a855f7] px-3 py-2 text-xs font-semibold text-white shadow-lg hover:opacity-90 sm:hidden"
-              title="Set availability"
-            >
-              <Zap className="h-3.5 w-3.5" />
-              Live
-            </Button>
+              <Button
+                onClick={() => setIsFilterOpen(true)}
+                variant="outline"
+                className="inline-flex items-center gap-2 rounded-[14px] border border-white/12 bg-white/8 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur-[10px] transition-all hover:bg-white/12"
+                title="Filters"
+              >
+                <Settings className="h-4 w-4" />
+                Filters
+              </Button>
 
-                    <Button
-                      onClick={() => setIsFilterOpen(true)}
-                      variant="outline"
-              className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-[rgba(99,102,241,0.7)] px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-[rgba(99,102,241,0.85)]"
-                      title="Filters"
-                    >
-              <Settings className="h-3.5 w-3.5" />
-                      Filters
-        </Button>
-
-                        <button
-                          type="button"
-                    onClick={() => setActiveSidebarItem("settings")}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition hover:bg-white/15"
-                    aria-label="Open settings"
-                    title="Settings"
-                        >
-              <Settings className="h-4 w-4" />
-                        </button>
+              <button
+                type="button"
+                onClick={() => setActiveSidebarItem("settings")}
+                className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-white/8 bg-white/8 text-white transition hover:bg-white/12 backdrop-blur-[10px]"
+                aria-label="Open settings"
+                title="Settings"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -2670,10 +2665,11 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                     </DropdownMenuContent>
                   </DropdownMenu>
             </div>
-          </header>
+          </div>
+        </header>
 
-          <div className="flex flex-1 flex-col gap-6 overflow-hidden px-4 pb-6 pt-4 md:px-8 md:pb-8 md:pt-6 lg:px-10">
-            <div className="flex flex-1 flex-col gap-6 xl:flex-row xl:gap-[1px] xl:overflow-hidden">
+          <div className="flex flex-1 flex-col gap-6 overflow-hidden px-8 pb-8 pt-6">
+            <div className="flex flex-1 flex-col gap-6 xl:flex-row xl:gap-6 xl:overflow-hidden">
               <AnimatePresence initial={false}>
                 {!isLeftPanelCollapsed && (
                   <motion.div
@@ -2682,7 +2678,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: -32, opacity: 0 }}
                     transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="relative flex w-full flex-col gap-6 xl:max-w-[520px] xl:overflow-hidden xl:pr-2"
+                    className="relative flex w-full flex-col gap-5 xl:w-[560px] xl:flex-shrink-0 xl:overflow-hidden"
                   >
                     <button
                       type="button"
@@ -2766,16 +2762,16 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                   />
 
                   <div className="flex items-center justify-between px-8 pt-8">
-                    <div className="pointer-events-auto inline-flex items-center gap-3 rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-5 py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]">
-                      <Compass className="h-4 w-4 text-indigo-300" />
+                    <div className="pointer-events-auto inline-flex items-center gap-3 rounded-[14px] border border-white/8 bg-white/8 px-4 py-2.5 text-sm font-semibold text-white shadow-sm backdrop-blur-[10px] transition-all hover:bg-white/12">
+                      <MapPin className="h-4 w-4 text-[#3CEAD7]" />
                       <span>{displayCity}, Netherlands</span>
                     </div>
                     <div className="pointer-events-auto flex items-center gap-3">
-                      <button className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)] hover:border-indigo-400">
-                        <MapPin className="h-5 w-5" />
+                      <button className="glass-button flex h-10 w-10 items-center justify-center text-white">
+                        <MapPin className="h-4 w-4" />
                       </button>
-                      <button className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)] hover:border-indigo-400">
-                        <Settings className="h-5 w-5" />
+                      <button className="glass-button flex h-10 w-10 items-center justify-center text-white">
+                        <Settings className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -2789,15 +2785,15 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
           {MAP_FILTERS.find((filter) => filter.id === activeMapFilter)?.hint}
                   </div>
 
-                  <div className="pointer-events-auto absolute bottom-12 left-12 flex flex-col gap-3">
+                  <div className="pointer-events-auto absolute bottom-12 left-12 flex flex-col gap-2">
                     <button 
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]"
+                      className="glass-button flex h-10 w-10 items-center justify-center text-white text-lg font-bold"
                       title="Zoom in"
                     >
                       +
                     </button>
                     <button 
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]"
+                      className="glass-button flex h-10 w-10 items-center justify-center text-white text-lg font-bold"
                       title="Zoom out"
                     >
                       −
@@ -2836,7 +2832,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                         animate={{ x: 0, opacity: 1 }}
                         exit={{ x: 48, opacity: 0 }}
                         transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="pointer-events-auto absolute bottom-10 right-10 w-[420px] max-w-[min(420px,calc(100vw-40px))] rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-7 py-6 text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)]"
+                        className="glass-card pointer-events-auto absolute bottom-10 right-10 w-[420px] max-w-[min(420px,calc(100vw-40px))] px-7 py-6 text-white"
                       >
                         <div className="absolute right-6 top-6 flex items-center gap-2">
                           <motion.button
@@ -3129,7 +3125,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                           handleUserSelect(user)
                           setIsPeoplePanelOpen(false)
                         }}
-                        className="cursor-pointer rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px] transition-all hover:bg-[rgba(20,20,30,0.7)] hover:border-white/15"
+                        className="glass-card cursor-pointer p-4"
                       >
                         <div className="flex items-start gap-3">
                           <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#667eea] to-[#764ba2] text-lg font-semibold text-white shadow-lg shadow-indigo-500/40">
