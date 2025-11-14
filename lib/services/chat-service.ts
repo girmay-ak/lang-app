@@ -40,6 +40,7 @@ export interface ConversationSummary {
   lastMessageAt: string | null
   unreadCount: number
   isRequest?: boolean
+  languagePair?: string | null
 }
 
 export const chatService = {
@@ -111,13 +112,41 @@ export const chatService = {
       const supabase = createClient()
       const { data, error } = await supabase
         .from("messages")
-        .select("*")
+        .select(`
+          id,
+          conversation_id,
+          sender_id,
+          content,
+          message_type,
+          media_url,
+          voice_duration,
+          created_at,
+          is_read,
+          is_deleted
+        `)
         .eq("conversation_id", conversationId)
+        .eq("is_deleted", false)
         .order("created_at", { ascending: true })
 
-      if (error) throw error
+      if (error) {
+        console.error("[chatService] getMessages error:", error)
+        throw error
+      }
 
-      return data ?? []
+      if (!data) return []
+
+      // Map to ChatMessage format
+      return data.map((msg: any) => ({
+        id: msg.id,
+        conversation_id: msg.conversation_id,
+        sender_id: msg.sender_id,
+        content: msg.content,
+        message_type: msg.message_type || "text",
+        media_url: msg.media_url,
+        voice_duration: msg.voice_duration,
+        created_at: msg.created_at,
+        is_read: msg.is_read || false,
+      }))
     } catch (error) {
       console.error("[chatService] getMessages error:", error)
       return []
@@ -154,11 +183,11 @@ export const chatService = {
 
     if (error) throw error
 
+    // Update conversation with last message (unread count is handled by database trigger)
+    // The trigger will automatically update last_message, last_message_at, and increment unread count
     await supabase
       .from("conversations")
       .update({
-        last_message: content,
-        last_message_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", conversationId)
@@ -233,6 +262,85 @@ export const chatService = {
     }
   },
 
+  async setTypingIndicator(conversationId: string, isTyping: boolean) {
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      if (isTyping) {
+        await supabase.from("typing_indicators").upsert({
+          conversation_id: conversationId,
+          user_id: user.id,
+          is_typing: true,
+          updated_at: new Date().toISOString(),
+        })
+      } else {
+        await supabase
+          .from("typing_indicators")
+          .delete()
+          .eq("conversation_id", conversationId)
+          .eq("user_id", user.id)
+      }
+    } catch (error) {
+      console.error("[chatService] setTypingIndicator error:", error)
+    }
+  },
+
+  subscribeToTyping(
+    conversationId: string,
+    onTypingChange: (userId: string, isTyping: boolean) => void,
+  ) {
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`typing:${conversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "typing_indicators",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            onTypingChange(payload.new.user_id, payload.new.is_typing)
+          } else if (payload.eventType === "DELETE") {
+            onTypingChange(payload.old.user_id, false)
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  },
+
+  async updateOnlineStatus(isOnline: boolean) {
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      await supabase
+        .from("users")
+        .update({
+          is_online: isOnline,
+          last_seen_at: new Date().toISOString(),
+        })
+        .eq("id", user.id)
+    } catch (error) {
+      console.error("[chatService] updateOnlineStatus error:", error)
+    }
+  },
+
   async createOrGetConversation(otherUserId: string): Promise<ConversationRecord> {
     const supabase = createClient()
     const {
@@ -286,34 +394,34 @@ export const chatService = {
       throw new Error("You must be signed in to view conversations.")
     }
 
-    const { data, error } = await supabase
-      .from("conversations")
-      .select(
-        `
+      const { data, error } = await supabase
+        .from("conversations")
+        .select(
+          `
         id,
         user1_id,
         user2_id,
         last_message,
         last_message_at,
-        user1_unread_count,
-        user2_unread_count,
+        unread_count_user1,
+        unread_count_user2,
         user1:users!conversations_user1_id_fkey(id, full_name, avatar_url, is_online),
         user2:users!conversations_user2_id_fkey(id, full_name, avatar_url, is_online)
       `,
-      )
-      .eq("id", conversationId)
-      .maybeSingle()
+        )
+        .eq("id", conversationId)
+        .maybeSingle()
 
-    if (error) {
-      console.error("[chatService] getConversationPreview error:", error)
-      throw error
-    }
+      if (error) {
+        console.error("[chatService] getConversationPreview error:", error)
+        throw error
+      }
 
-    if (!data) return null
+      if (!data) return null
 
-    const otherUserId = data.user1_id === user.id ? data.user2_id : data.user1_id
-    const otherUser = data.user1_id === user.id ? data.user2 : data.user1
-    const unreadCount = data.user1_id === user.id ? data.user1_unread_count : data.user2_unread_count
+      const otherUserId = data.user1_id === user.id ? data.user2_id : data.user1_id
+      const otherUser = data.user1_id === user.id ? data.user2 : data.user1
+      const unreadCount = data.user1_id === user.id ? data.unread_count_user1 : data.unread_count_user2
 
     return {
       id: data.id,
@@ -348,7 +456,6 @@ export const chatService = {
           last_message_at,
           unread_count_user1,
           unread_count_user2,
-          status,
           user1:users!conversations_user1_id_fkey(id, full_name, avatar_url, is_online),
           user2:users!conversations_user2_id_fkey(id, full_name, avatar_url, is_online)
         `,
@@ -358,26 +465,93 @@ export const chatService = {
 
       if (error) throw error
 
-      return (data ?? []).map((record: any) => {
-        const isUser1 = record.user1_id === user.id
-        const otherUser = isUser1 ? record.user2 : record.user1
-        const unreadCount = isUser1 ? record.unread_count_user1 : record.unread_count_user2
+      // Get current user's languages for language pair display
+      const { data: currentUserLanguages } = await supabase
+        .from("user_languages")
+        .select("language_code, language_type")
+        .eq("user_id", user.id)
 
-        return {
-          conversationId: record.id,
-          otherUserId: otherUser?.id ?? (isUser1 ? record.user2_id : record.user1_id),
-          name: otherUser?.full_name ?? "Language Partner",
-          avatar: otherUser?.avatar_url ?? null,
-          online: Boolean(otherUser?.is_online),
-          lastMessage: record.last_message,
-          lastMessageAt: record.last_message_at,
-          unreadCount: typeof unreadCount === "number" ? unreadCount : 0,
-          isRequest: record.status ? record.status === "pending" : false,
-        } satisfies ConversationSummary
-      })
+      const currentUserNativeLangs = currentUserLanguages
+        ?.filter((lang) => lang.language_type === "native")
+        .map((lang) => lang.language_code) || []
+      const currentUserLearningLangs = currentUserLanguages
+        ?.filter((lang) => lang.language_type === "learning")
+        .map((lang) => lang.language_code) || []
+
+      // Get language pairs for all conversations in parallel
+      const conversationSummaries = await Promise.all(
+        (data ?? []).map(async (record: any) => {
+          const isUser1 = record.user1_id === user.id
+          const otherUser = isUser1 ? record.user2 : record.user1
+          const unreadCount = isUser1 ? record.unread_count_user1 : record.unread_count_user2
+          const otherUserId = otherUser?.id ?? (isUser1 ? record.user2_id : record.user1_id)
+
+          // Get language pair
+          const languagePair = await this.getLanguagePair(user.id, otherUserId)
+
+          return {
+            conversationId: record.id,
+            otherUserId,
+            name: otherUser?.full_name ?? "Language Partner",
+            avatar: otherUser?.avatar_url ?? null,
+            online: Boolean(otherUser?.is_online),
+            lastMessage: record.last_message,
+            lastMessageAt: record.last_message_at,
+            unreadCount: typeof unreadCount === "number" ? unreadCount : 0,
+            isRequest: record.status ? record.status === "pending" : false,
+            languagePair,
+          } satisfies ConversationSummary
+        })
+      )
+
+      return conversationSummaries
     } catch (error) {
       console.error("[chatService] getConversationSummaries error:", error)
       return []
+    }
+  },
+
+  async getLanguagePair(userId1: string, userId2: string): Promise<string | null> {
+    try {
+      const supabase = createClient()
+
+      // Get languages for both users
+      const [user1Langs, user2Langs] = await Promise.all([
+        supabase
+          .from("user_languages")
+          .select("language_code, language_type")
+          .eq("user_id", userId1),
+        supabase
+          .from("user_languages")
+          .select("language_code, language_type")
+          .eq("user_id", userId2),
+      ])
+
+      const user1Native = user1Langs.data?.filter((l) => l.language_type === "native").map((l) => l.language_code) || []
+      const user1Learning = user1Langs.data?.filter((l) => l.language_type === "learning").map((l) => l.language_code) || []
+      const user2Native = user2Langs.data?.filter((l) => l.language_type === "native").map((l) => l.language_code) || []
+      const user2Learning = user2Langs.data?.filter((l) => l.language_type === "learning").map((l) => l.language_code) || []
+
+      // Find matching languages (user1's native matches user2's learning, or vice versa)
+      const match1 = user1Native.find((lang) => user2Learning.includes(lang))
+      const match2 = user2Native.find((lang) => user1Learning.includes(lang))
+
+      if (match1 && match2) {
+        // Get language names from languages table
+        const [lang1, lang2] = await Promise.all([
+          supabase.from("languages").select("code").eq("code", match1).single(),
+          supabase.from("languages").select("code").eq("code", match2).single(),
+        ])
+
+        const code1 = lang1.data?.code?.toUpperCase() || match1.toUpperCase()
+        const code2 = lang2.data?.code?.toUpperCase() || match2.toUpperCase()
+        return `${code1} ↔ ${code2}`
+      }
+
+      return null
+    } catch (error) {
+      console.error("[chatService] getLanguagePair error:", error)
+      return null
     }
   },
 }

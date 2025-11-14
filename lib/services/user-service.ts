@@ -2,6 +2,13 @@
 
 import { createClient } from "@/lib/supabase/client"
 
+export interface UserLanguageRecord {
+  user_id?: string | null
+  language_code: string
+  language_type: "native" | "learning"
+  proficiency_level: "beginner" | "elementary" | "intermediate" | "advanced" | "native" | null
+}
+
 export interface UserRecord {
   id: string
   full_name: string | null
@@ -16,12 +23,7 @@ export interface UserRecord {
   last_active_at: string | null
   languages_speak?: string[]
   languages_learn?: string[]
-}
-
-interface UserLanguageRow {
-  language_code: string
-  language_type: "native" | "learning"
-  proficiency_level: "beginner" | "elementary" | "intermediate" | "advanced" | "native"
+  user_languages?: UserLanguageRecord[]
 }
 
 export const userService = {
@@ -69,20 +71,20 @@ export const userService = {
       throw error
     }
 
+    const userLanguages = (data?.user_languages ?? []) as UserLanguageRecord[]
+
     const languages_speak =
-      data?.user_languages
-        ?.filter((ul: UserLanguageRow) => ul.language_type === "native")
-        .map((ul: UserLanguageRow) => ul.language_code) ?? []
+      userLanguages?.filter((ul: UserLanguageRecord) => ul.language_type === "native").map((ul) => ul.language_code) ?? []
 
     const languages_learn =
-      data?.user_languages
-        ?.filter((ul: UserLanguageRow) => ul.language_type === "learning")
-        .map((ul: UserLanguageRow) => ul.language_code) ?? []
+      userLanguages?.filter((ul: UserLanguageRecord) => ul.language_type === "learning").map((ul) => ul.language_code) ??
+      []
 
     return {
       ...data,
       languages_speak,
       languages_learn,
+      user_languages: userLanguages,
     }
   },
 

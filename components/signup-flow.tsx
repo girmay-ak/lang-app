@@ -6,171 +6,27 @@ import { useEffect, useMemo, useState } from "react"
 import {
   ArrowRight,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   LocateFixed,
   MapPin,
-  Search,
   Sparkles,
   Upload,
-  X,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { LanguagePicker, type Language } from "./signup/language-picker"
+import { SummaryCard } from "./signup/summary-card"
+import { BackgroundGlow } from "./signup/background-glow"
+import { LANGUAGES, STEP_META, TOTAL_STEPS } from "./signup/constants"
 
 interface SignupFlowProps {
   onComplete: () => void
 }
-
-type Language = {
-  code: string
-  name: string
-  flag: string
-}
-
-const LANGUAGES: Language[] = [
-  { code: "af", name: "Afrikaans", flag: "🇿🇦" },
-  { code: "sq", name: "Albanian", flag: "🇦🇱" },
-  { code: "am", name: "Amharic", flag: "🇪🇹" },
-  { code: "ar", name: "Arabic", flag: "🇸🇦" },
-  { code: "hy", name: "Armenian", flag: "🇦🇲" },
-  { code: "az", name: "Azerbaijani", flag: "🇦🇿" },
-  { code: "eu", name: "Basque", flag: "🇪🇸" },
-  { code: "be", name: "Belarusian", flag: "🇧🇾" },
-  { code: "bn", name: "Bengali", flag: "🇧🇩" },
-  { code: "bs", name: "Bosnian", flag: "🇧🇦" },
-  { code: "bg", name: "Bulgarian", flag: "🇧🇬" },
-  { code: "my", name: "Burmese", flag: "🇲🇲" },
-  { code: "ca", name: "Catalan", flag: "🇪🇸" },
-  { code: "ceb", name: "Cebuano", flag: "🇵🇭" },
-  { code: "zh", name: "Chinese (Simplified)", flag: "🇨🇳" },
-  { code: "zh-TW", name: "Chinese (Traditional)", flag: "🇹🇼" },
-  { code: "hr", name: "Croatian", flag: "🇭🇷" },
-  { code: "cs", name: "Czech", flag: "🇨🇿" },
-  { code: "da", name: "Danish", flag: "🇩🇰" },
-  { code: "nl", name: "Dutch", flag: "🇳🇱" },
-  { code: "en", name: "English", flag: "🇬🇧" },
-  { code: "eo", name: "Esperanto", flag: "🌍" },
-  { code: "et", name: "Estonian", flag: "🇪🇪" },
-  { code: "fi", name: "Finnish", flag: "🇫🇮" },
-  { code: "fr", name: "French", flag: "🇫🇷" },
-  { code: "gl", name: "Galician", flag: "🇪🇸" },
-  { code: "ka", name: "Georgian", flag: "🇬🇪" },
-  { code: "de", name: "German", flag: "🇩🇪" },
-  { code: "el", name: "Greek", flag: "🇬🇷" },
-  { code: "gu", name: "Gujarati", flag: "🇮🇳" },
-  { code: "ht", name: "Haitian Creole", flag: "🇭🇹" },
-  { code: "ha", name: "Hausa", flag: "🇳🇬" },
-  { code: "he", name: "Hebrew", flag: "🇮🇱" },
-  { code: "hi", name: "Hindi", flag: "🇮🇳" },
-  { code: "hmn", name: "Hmong", flag: "🇱🇦" },
-  { code: "hu", name: "Hungarian", flag: "🇭🇺" },
-  { code: "is", name: "Icelandic", flag: "🇮🇸" },
-  { code: "ig", name: "Igbo", flag: "🇳🇬" },
-  { code: "id", name: "Indonesian", flag: "🇮🇩" },
-  { code: "ga", name: "Irish", flag: "🇮🇪" },
-  { code: "it", name: "Italian", flag: "🇮🇹" },
-  { code: "ja", name: "Japanese", flag: "🇯🇵" },
-  { code: "jv", name: "Javanese", flag: "🇮🇩" },
-  { code: "kn", name: "Kannada", flag: "🇮🇳" },
-  { code: "kk", name: "Kazakh", flag: "🇰🇿" },
-  { code: "km", name: "Khmer", flag: "🇰🇭" },
-  { code: "rw", name: "Kinyarwanda", flag: "🇷🇼" },
-  { code: "ko", name: "Korean", flag: "🇰🇷" },
-  { code: "ku", name: "Kurdish", flag: "🇮🇶" },
-  { code: "ky", name: "Kyrgyz", flag: "🇰🇬" },
-  { code: "lo", name: "Lao", flag: "🇱🇦" },
-  { code: "la", name: "Latin", flag: "🇻🇦" },
-  { code: "lv", name: "Latvian", flag: "🇱🇻" },
-  { code: "lt", name: "Lithuanian", flag: "🇱🇹" },
-  { code: "lb", name: "Luxembourgish", flag: "🇱🇺" },
-  { code: "mk", name: "Macedonian", flag: "🇲🇰" },
-  { code: "mg", name: "Malagasy", flag: "🇲🇬" },
-  { code: "ms", name: "Malay", flag: "🇲🇾" },
-  { code: "ml", name: "Malayalam", flag: "🇮🇳" },
-  { code: "mt", name: "Maltese", flag: "🇲🇹" },
-  { code: "mi", name: "Maori", flag: "🇳🇿" },
-  { code: "mr", name: "Marathi", flag: "🇮🇳" },
-  { code: "mn", name: "Mongolian", flag: "🇲🇳" },
-  { code: "ne", name: "Nepali", flag: "🇳🇵" },
-  { code: "no", name: "Norwegian", flag: "🇳🇴" },
-  { code: "ny", name: "Nyanja", flag: "🇲🇼" },
-  { code: "or", name: "Odia", flag: "🇮🇳" },
-  { code: "ps", name: "Pashto", flag: "🇦🇫" },
-  { code: "fa", name: "Persian", flag: "🇮🇷" },
-  { code: "pl", name: "Polish", flag: "🇵🇱" },
-  { code: "pt", name: "Portuguese", flag: "🇵🇹" },
-  { code: "pa", name: "Punjabi", flag: "🇮🇳" },
-  { code: "ro", name: "Romanian", flag: "🇷🇴" },
-  { code: "ru", name: "Russian", flag: "🇷🇺" },
-  { code: "sm", name: "Samoan", flag: "🇼🇸" },
-  { code: "gd", name: "Scottish Gaelic", flag: "🏴" },
-  { code: "sr", name: "Serbian", flag: "🇷🇸" },
-  { code: "st", name: "Sesotho", flag: "🇱🇸" },
-  { code: "sn", name: "Shona", flag: "🇿🇼" },
-  { code: "sd", name: "Sindhi", flag: "🇵🇰" },
-  { code: "si", name: "Sinhala", flag: "🇱🇰" },
-  { code: "sk", name: "Slovak", flag: "🇸🇰" },
-  { code: "sl", name: "Slovenian", flag: "🇸🇮" },
-  { code: "so", name: "Somali", flag: "🇸🇴" },
-  { code: "es", name: "Spanish", flag: "🇪🇸" },
-  { code: "su", name: "Sundanese", flag: "🇮🇩" },
-  { code: "sw", name: "Swahili", flag: "🇰🇪" },
-  { code: "sv", name: "Swedish", flag: "🇸🇪" },
-  { code: "tg", name: "Tajik", flag: "🇹🇯" },
-  { code: "ta", name: "Tamil", flag: "🇮🇳" },
-  { code: "tt", name: "Tatar", flag: "🇷🇺" },
-  { code: "te", name: "Telugu", flag: "🇮🇳" },
-  { code: "th", name: "Thai", flag: "🇹🇭" },
-  { code: "tr", name: "Turkish", flag: "🇹🇷" },
-  { code: "tk", name: "Turkmen", flag: "🇹🇲" },
-  { code: "uk", name: "Ukrainian", flag: "🇺🇦" },
-  { code: "ur", name: "Urdu", flag: "🇵🇰" },
-  { code: "ug", name: "Uyghur", flag: "🇨🇳" },
-  { code: "uz", name: "Uzbek", flag: "🇺🇿" },
-  { code: "vi", name: "Vietnamese", flag: "🇻🇳" },
-  { code: "cy", name: "Welsh", flag: "🏴" },
-  { code: "xh", name: "Xhosa", flag: "🇿🇦" },
-  { code: "yi", name: "Yiddish", flag: "🇮🇱" },
-  { code: "yo", name: "Yoruba", flag: "🇳🇬" },
-  { code: "zu", name: "Zulu", flag: "🇿🇦" },
-].sort((a, b) => a.name.localeCompare(b.name))
-
-const STEP_META = [
-  {
-    id: 1,
-    label: "Basics",
-    title: "Set up your account",
-    description: "Share a friendly name and secure your login in under a minute.",
-  },
-  {
-    id: 2,
-    label: "Languages",
-    title: "Pick your languages",
-    description: "Let us know what you speak and what you’d love to learn. We’ll take care of the matching.",
-  },
-  {
-    id: 3,
-    label: "Location",
-    title: "Share your location",
-    description: "Let us place you on the Den Haag map so we can surface language partners nearby.",
-  },
-  {
-    id: 4,
-    label: "Finish",
-    title: "Ready to explore",
-    description: "Review everything at a glance and dive straight into the community.",
-  },
-] as const
-
-const TOTAL_STEPS = STEP_META.length
 
 export function SignupFlow({ onComplete }: SignupFlowProps) {
   const router = useRouter()
@@ -611,11 +467,12 @@ export function SignupFlow({ onComplete }: SignupFlowProps) {
                   onAdd={(code) => addLanguage(code, "speak")}
                   onRemove={(code) => removeLanguage(code, "speak")}
                   emptyLabel="Add at least one language to teach or support."
+                  languages={LANGUAGES}
                 />
 
                 <LanguagePicker
-                  title="Languages you’re learning"
-                  description="Pick everything you’re excited to practise."
+                  title="Languages you're learning"
+                  description="Pick everything you're excited to practise."
                   placeholder="Search languages..."
                   open={learnOpen}
                   setOpen={setLearnOpen}
@@ -623,6 +480,7 @@ export function SignupFlow({ onComplete }: SignupFlowProps) {
                   onAdd={(code) => addLanguage(code, "learn")}
                   onRemove={(code) => removeLanguage(code, "learn")}
                   emptyLabel="Optional, but helps us tailor recommendations."
+                  languages={LANGUAGES}
                 />
               </div>
             )}
@@ -778,135 +636,3 @@ export function SignupFlow({ onComplete }: SignupFlowProps) {
   )
 }
 
-function LanguagePicker({
-  title,
-  description,
-  placeholder,
-  open,
-  setOpen,
-  selected,
-  onAdd,
-  onRemove,
-  emptyLabel,
-}: {
-  title: string
-  description: string
-  placeholder: string
-  open: boolean
-  setOpen: (value: boolean) => void
-  selected: Language[]
-  onAdd: (code: string) => void
-  onRemove: (code: string) => void
-  emptyLabel: string
-}) {
-  return (
-    <div className="space-y-4 rounded-3xl border border-white/12 bg-white/8 p-6">
-      <div>
-        <h3 className="text-lg font-semibold text-white">{title}</h3>
-        <p className="mt-1 text-sm text-white/65">{description}</p>
-      </div>
-
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={open}
-            className="h-12 w-full justify-between rounded-2xl border border-white/15 bg-black/10 px-4 text-sm text-white/80 hover:bg-white/10"
-          >
-            <span className="flex items-center gap-2">
-              <Search className="h-4 w-4" />
-              {placeholder}
-            </span>
-            <ChevronDown className="h-4 w-4 opacity-60" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[min(380px,90vw)] overflow-hidden rounded-xl border border-white/10 bg-[#040720]/95 p-0 shadow-2xl backdrop-blur-xl">
-          <Command>
-            <CommandInput placeholder="Search languages..." className="border-b border-white/10" />
-            <CommandList className="max-h-64">
-              <CommandEmpty className="py-5 text-sm text-white/60">No language found.</CommandEmpty>
-              <CommandGroup>
-                {LANGUAGES.map((language) => (
-                  <CommandItem
-                    key={language.code}
-                    value={language.name}
-                    onSelect={() => onAdd(language.code)}
-                    className="flex items-center gap-4 px-5 py-3 text-white/85"
-                  >
-                    <span className="text-xl">{language.flag}</span>
-                    <span className="flex-1 text-sm">{language.name}</span>
-                    {selected.some((item) => item.code === language.code) && <Check className="h-4 w-4 text-emerald-400" />}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-
-      {selected.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {selected.map((language) => (
-            <div
-              key={language.code}
-              className="group inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs text-white transition hover:border-white/30 hover:bg-white/15"
-            >
-              <span className="text-lg">{language.flag}</span>
-              <span className="font-medium">{language.name}</span>
-              <button
-                onClick={() => onRemove(language.code)}
-                className="rounded-full bg-white/0 p-1 text-white/60 transition group-hover:bg-white/15 group-hover:text-white"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-white/55">{emptyLabel}</p>
-      )}
-    </div>
-  )
-}
-
-function SummaryCard({
-  title,
-  items,
-  placeholder,
-}: {
-  title: string
-  items: Language[]
-  placeholder: string
-}) {
-  return (
-    <div className="rounded-3xl border border-white/12 bg-white/8 p-6">
-      <h4 className="text-base font-semibold text-white">{title}</h4>
-      {items.length > 0 ? (
-        <div className="mt-4 space-y-2 text-sm text-white/75">
-          {items.map((language) => (
-            <div key={language.code} className="flex items-center gap-3">
-              <span className="text-lg">{language.flag}</span>
-              <span>{language.name}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-3 text-sm text-white/55">{placeholder}</p>
-      )}
-    </div>
-  )
-}
-
-function BackgroundGlow() {
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      <div className="absolute -top-44 -left-32 h-96 w-96 rounded-full bg-[#6366f1]/45 blur-[170px]" />
-      <div className="absolute top-[22%] right-[-140px] h-80 w-80 rounded-full bg-[#ec4899]/35 blur-[150px]" />
-      <div className="absolute bottom-[-160px] left-[18%] h-[420px] w-[420px] rounded-full bg-[#0ea5e9]/25 blur-[180px]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_5%_0%,rgba(129,140,248,0.18),transparent_55%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_95%_0%,rgba(244,114,182,0.14),transparent_55%)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(15,23,42,0.65)_0%,rgba(3,5,24,0.92)_60%)]" />
-    </div>
-  )
-}

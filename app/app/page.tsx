@@ -10,6 +10,8 @@ import { NewExchangeView } from "@/components/new-exchange-view";
 import { SetFlagModal } from "@/components/set-flag-modal";
 import { OnboardingCarousel } from "@/components/onboarding-carousel";
 import { SignupFlow } from "@/components/signup-flow";
+import { CommunityLayout } from "@/components/dashboard/community-layout";
+import { ExploreLayout } from "@/components/explore-layout";
 import { createClient } from "@/lib/supabase/client";
 import { notificationService } from "@/lib/services/notification-service";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,7 @@ export default function AppRoot() {
   const [activeTab, setActiveTab] = useState<
     "map" | "feed" | "chats" | "notifications" | "profile"
   >("map");
+  const [exploreTab, setExploreTab] = useState<"home" | "map" | "chats" | "events" | "flag" | "settings">("map");
   const [isFlagModalOpen, setIsFlagModalOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
@@ -38,6 +41,7 @@ export default function AppRoot() {
   } | null>(null);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [currentUser, setCurrentUser] = useState<{ name: string; avatar?: string } | null>(null);
   const hasCheckedAuth = useRef(false);
   const isProcessingAuthChange = useRef(false);
   const mapAvailabilityToggleRef = useRef<(() => void) | null>(null);
@@ -263,6 +267,12 @@ export default function AppRoot() {
                   learnLanguages: profile.learnLanguages,
                 }),
               );
+              
+              // Set current user state
+              setCurrentUser({
+                name: profile.name,
+                avatar: profile.photo || undefined,
+              });
 
               console.log("[v0] Profile setup complete");
               localStorage.removeItem("pending_user_profile");
@@ -290,8 +300,18 @@ export default function AppRoot() {
               return;
             }
             console.log("[v0] User logged in but no profile, allowing access");
+            // Set basic user info from session
+            setCurrentUser({
+              name: session.user.email?.split("@")[0] || "User",
+              avatar: undefined,
+            });
           } else {
             console.log("[v0] User data fetched:", userData);
+            // Set current user info
+            setCurrentUser({
+              name: userData.full_name || session.user.email?.split("@")[0] || "User",
+              avatar: userData.avatar_url || undefined,
+            });
 
             const speakCount = Array.isArray(userData.languages_speak)
               ? userData.languages_speak.length
@@ -591,7 +611,7 @@ export default function AppRoot() {
   }
 
   return (
-    <div className="safe-area-inset flex h-screen flex-col bg-background">
+    <div className={`safe-area-inset flex h-screen flex-col ${activeTab === "map" ? "" : "bg-background"}`}>
       {showWelcome && (
         <div className="bg-emerald-600 px-4 py-2 text-center text-sm text-white">
           Welcome! Your email is confirmed and your profile was set up.
@@ -603,23 +623,40 @@ export default function AppRoot() {
           </button>
         </div>
       )}
-      <main className="animate-slide-up flex-1 overscroll-contain overflow-y-auto">
+      <main className={`animate-slide-up flex-1 overscroll-contain ${activeTab === "map" ? "overflow-hidden relative" : "overflow-y-auto"}`}>
         {showNewExchange ? (
           <NewExchangeView onClose={() => setShowNewExchange(false)} />
         ) : (
           <>
             {activeTab === "map" && (
-              <MapView
-                onSetFlag={() => setIsFlagModalOpen(true)}
-                onProfileModalChange={setIsProfileModalOpen}
-                onRegisterAvailabilityToggle={handleRegisterAvailabilityToggle}
-                onStartChat={(chat) => {
-                  setChatLaunch(chat);
-                  setActiveTab("chats");
+              <ExploreLayout
+                userName={currentUser?.name || "User"}
+                userAvatar={currentUser?.avatar}
+                unreadNotificationCount={unreadNotificationCount}
+                activeTab={exploreTab}
+                onTabChange={(tab) => {
+                  setExploreTab(tab);
+                  if (tab === "chats") {
+                    setActiveTab("chats");
+                  } else if (tab === "flag") {
+                    setIsFlagModalOpen(true);
+                  }
+                }}
+                mapComponent={null}
+              />
+            )}
+            {activeTab === "feed" && (
+              <CommunityLayout
+                userName={currentUser?.name || "User"}
+                userAvatar={currentUser?.avatar}
+                userStatus="Active explorer"
+                onSetAvailability={() => {
+                  if (mapAvailabilityToggleRef.current) {
+                    mapAvailabilityToggleRef.current();
+                  }
                 }}
               />
             )}
-            {activeTab === "feed" && <FeedView />}
             {activeTab === "chats" && (
               <ChatsView
                 onChatOpenChange={setIsChatOpen}

@@ -1,6 +1,7 @@
 "use client";
 
 import { MessageSquare, Map, Bell, Plus, User } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface BottomNavProps {
@@ -18,9 +19,18 @@ export function BottomNav({
   chatBadgeCount = 0,
   notificationBadgeCount = 0,
 }: BottomNavProps) {
+  const router = useRouter();
   const showChatBadge = Number.isFinite(chatBadgeCount) && chatBadgeCount > 0;
   const showNotificationBadge =
     Number.isFinite(notificationBadgeCount) && notificationBadgeCount > 0;
+
+  const handleTabClick = (tab: "map" | "chats" | "notifications" | "profile") => {
+    if (tab === "chats") {
+      router.push("/chat");
+    } else {
+      onTabChange(tab);
+    }
+  };
 
   return (
     <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md">
@@ -42,7 +52,7 @@ export function BottomNav({
             </button>
 
             <button
-              onClick={() => onTabChange("chats")}
+              onClick={() => handleTabClick("chats")}
               className={cn(
                 "relative flex items-center justify-center transition-all",
                 activeTab === "chats"

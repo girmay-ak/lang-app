@@ -33,8 +33,8 @@ interface Conversation {
   user2_id: string;
   last_message: string | null;
   last_message_at: string | null;
-  user1_unread_count: number;
-  user2_unread_count: number;
+  unread_count_user1: number;
+  unread_count_user2: number;
   other_user: {
     id: string;
     full_name: string;
@@ -95,8 +95,8 @@ export function ChatsView({
           user2_id,
           last_message,
           last_message_at,
-          user1_unread_count,
-          user2_unread_count,
+          unread_count_user1,
+          unread_count_user2,
           user1:users!conversations_user1_id_fkey(id, full_name, avatar_url, is_online),
           user2:users!conversations_user2_id_fkey(id, full_name, avatar_url, is_online)
         `,
@@ -128,8 +128,8 @@ export function ChatsView({
         const otherUser = conv.user1_id === userId ? conv.user2 : conv.user1;
         const unreadCount =
           conv.user1_id === userId
-            ? conv.user1_unread_count
-            : conv.user2_unread_count;
+            ? conv.unread_count_user1
+            : conv.unread_count_user2;
 
         return {
           id: conv.id,

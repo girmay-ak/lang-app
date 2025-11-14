@@ -1,7 +1,8 @@
 "use client"
 
 import { createClient } from "@/lib/supabase/client"
-import type { UserRecord } from "@/lib/services/user-service"
+import type { SupabaseClient } from "@supabase/supabase-js"
+import type { UserLanguageRecord, UserRecord } from "@/lib/services/user-service"
 
 export interface NearbyUser extends UserRecord {
   distance?: number
@@ -59,6 +60,78 @@ const applyFilters = (users: NearbyUser[], filters?: FindNearbyFilters) => {
   return filtered
 }
 
+const hydrateUserLanguages = async (supabase: SupabaseClient, users: NearbyUser[]): Promise<NearbyUser[]> => {
+  if (!users.length) {
+    return users
+  }
+
+  const usersNeedingLanguages = users.filter((user) => {
+    const languageRows = (user as any).user_languages as UserLanguageRecord[] | undefined
+    const hasLanguageRows = Array.isArray(languageRows) && languageRows.length > 0
+    const hasLanguageArrays =
+      (Array.isArray(user.languages_speak) && user.languages_speak.length > 0) ||
+      (Array.isArray(user.languages_learn) && user.languages_learn.length > 0)
+    return !hasLanguageRows || !hasLanguageArrays
+  })
+
+  if (usersNeedingLanguages.length === 0) {
+    return users
+  }
+
+  const userIds = usersNeedingLanguages.map((user) => user.id)
+  if (userIds.length === 0) {
+    return users
+  }
+
+  const { data, error } = await supabase
+    .from("user_languages")
+    .select("user_id, language_code, language_type, proficiency_level")
+    .in("user_id", userIds)
+
+  if (error) {
+    console.warn("[mapService] hydrateUserLanguages error:", error)
+    return users
+  }
+
+  const grouped = new Map<string, UserLanguageRecord[]>()
+  for (const row of data ?? []) {
+    if (!row?.user_id) continue
+    const existing = grouped.get(row.user_id) ?? []
+    existing.push({
+      user_id: row.user_id,
+      language_code: row.language_code,
+      language_type: row.language_type as UserLanguageRecord["language_type"],
+      proficiency_level: row.proficiency_level,
+    })
+    grouped.set(row.user_id, existing)
+  }
+
+  if (grouped.size === 0) {
+    return users
+  }
+
+  return users.map((user) => {
+    const languageRows = grouped.get(user.id)
+    if (!languageRows?.length) {
+      return user
+    }
+
+    const languages_speak = languageRows
+      .filter((row) => row.language_type === "native")
+      .map((row) => row.language_code)
+    const languages_learn = languageRows
+      .filter((row) => row.language_type === "learning")
+      .map((row) => row.language_code)
+
+    return {
+      ...user,
+      user_languages: languageRows,
+      languages_speak: languages_speak.length ? languages_speak : user.languages_speak ?? [],
+      languages_learn: languages_learn.length ? languages_learn : user.languages_learn ?? [],
+    }
+  })
+}
+
 export const mapService = {
   async findNearbyUsers(
     latitude: number,
@@ -80,18 +153,21 @@ export const mapService = {
         return this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
       }
 
-      const rpcUsers = applyFilters(Array.isArray(data) ? data : [], filters)
-      const fallbackUsers = await this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
+      const rawRpcUsers = Array.isArray(data) ? data : []
+      const fallbackUsers = await this.findNearbyUsersFallback(latitude, longitude, radiusKm)
       if (!fallbackUsers.length) {
-        return rpcUsers
+        const hydratedRpcUsers = await hydrateUserLanguages(supabase, rawRpcUsers)
+        return applyFilters(hydratedRpcUsers, filters)
       }
 
       const merged = new Map<string, NearbyUser>()
-      for (const user of [...rpcUsers, ...fallbackUsers]) {
+      for (const user of [...rawRpcUsers, ...fallbackUsers]) {
         merged.set(user.id, { ...merged.get(user.id), ...user })
       }
 
-      return Array.from(merged.values())
+      const mergedUsers = Array.from(merged.values())
+      const hydrated = await hydrateUserLanguages(supabase, mergedUsers)
+      return applyFilters(hydrated, filters)
     } catch (error) {
       console.error("[mapService] findNearbyUsers error:", error)
       return this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
@@ -177,7 +253,8 @@ export const mapService = {
       .filter((user) => (Number.isFinite(user.distance) ? (user.distance ?? Infinity) <= radiusKm : true))
       .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
 
-    return applyFilters(withinRadius, filters)
+    const withLanguages = await hydrateUserLanguages(supabase, withinRadius)
+    return applyFilters(withLanguages, filters)
   },
 }
 

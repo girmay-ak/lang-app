@@ -38,6 +38,7 @@ import { useMap } from "@/hooks/use-map"
 import { userService, type UserRecord } from "@/lib/services/user-service"
 import { chatService } from "@/lib/services/chat-service"
 import { connectionService } from "@/lib/services/connection-service"
+import { eventService, type LanguageEvent } from "@/lib/services/event-service"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "@/components/ui/textarea"
@@ -442,6 +443,8 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   const [currentUserProfile, setCurrentUserProfile] = useState<UserRecord | null>(null)
   const [recentEventIds, setRecentEventIds] = useState<string[]>([])
   const previousEventIdsRef = useRef<Set<string>>(new Set())
+  const [languageEvents, setLanguageEvents] = useState<LanguageEvent[]>([])
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false)
   const [selectedUserIndex, setSelectedUserIndex] = useState<number | null>(null)
   const [favoriteProfileIds, setFavoriteProfileIds] = useState<Set<string>>(new Set())
   const [activeLanguageChip, setActiveLanguageChip] = useState<string>("All")
@@ -449,7 +452,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [sidebarTargetWidth, setSidebarTargetWidth] = useState(256)
   const [isSidebarOverlayOpen, setIsSidebarOverlayOpen] = useState(false)
-  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false)
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(true) // Start collapsed, will be set properly on mount
   const [activeSidebarItem, setActiveSidebarItem] = useState<"home" | "messages" | "discover" | "favorites" | "settings">(
     "discover",
   )
@@ -544,6 +547,12 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
       const baseWidth = width >= 1024 ? 256 : width >= 768 ? 224 : 0
       setSidebarTargetWidth(baseWidth)
       setIsSidebarCollapsed((prev) => (width < 1024 ? true : prev))
+      // Keep left panel open on desktop (>= 1280px), collapsed on smaller screens
+      if (width >= 1280) {
+        setIsLeftPanelCollapsed(false)
+      } else {
+        setIsLeftPanelCollapsed(true)
+      }
       if (width >= 768) {
         setIsSidebarOverlayOpen(false)
       }
@@ -1117,10 +1126,113 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
     availabilityEmoji,
   ])
 
+  // Fetch language events when location is available
+  useEffect(() => {
+    if (!effectiveUserLocation || isLoadingEvents) return
+
+    const fetchEvents = async () => {
+      setIsLoadingEvents(true)
+      try {
+        const viewerLanguageCodes = viewerLanguages.map((lang) => {
+          // Convert language name to code (simplified mapping)
+          const langMap: Record<string, string> = {
+            english: "en",
+            spanish: "es",
+            french: "fr",
+            german: "de",
+            italian: "it",
+            portuguese: "pt",
+            chinese: "zh",
+            japanese: "ja",
+            korean: "ko",
+            arabic: "ar",
+            russian: "ru",
+            dutch: "nl",
+          }
+          const lowerLang = lang.language.toLowerCase()
+          return langMap[lowerLang] || "en"
+        })
+
+        try {
+          const events = await eventService.findNearbyEvents(
+            effectiveUserLocation.lat,
+            effectiveUserLocation.lng,
+            {
+              languages: viewerLanguageCodes.length > 0 ? viewerLanguageCodes : undefined,
+              radius_km: filterDistance,
+              limit: 20,
+            },
+          )
+
+          setLanguageEvents(events)
+        } catch (error) {
+          // Silently handle event fetching errors - events are optional
+          console.warn("[MapView] Error fetching events (non-critical):", error instanceof Error ? error.message : error)
+          setLanguageEvents([])
+        }
+
+        // Sync external events in the background (don't wait for it)
+        eventService
+          .syncExternalEvents(effectiveUserLocation.lat, effectiveUserLocation.lng, filterDistance)
+          .catch((error) => {
+            console.warn("[MapView] Failed to sync external events:", error)
+          })
+      } catch (error) {
+        console.error("[MapView] Failed to fetch events:", error)
+      } finally {
+        setIsLoadingEvents(false)
+      }
+    }
+
+    fetchEvents()
+  }, [effectiveUserLocation, filterDistance, viewerLanguages])
+
+  // Helper function to format event time
+  const formatEventTime = (startTime: string): string => {
+    try {
+      const date = new Date(startTime)
+      const now = new Date()
+      const diffMs = date.getTime() - now.getTime()
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+      if (diffDays === 0) {
+        return `Today • ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+      } else if (diffDays === 1) {
+        return `Tomorrow • ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+      } else if (diffDays < 7) {
+        return `${date.toLocaleDateString("en-US", { weekday: "short" })} • ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+      } else {
+        return date.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+      }
+    } catch {
+      return startTime
+    }
+  }
+
+  // Convert language events to POIs
+  const eventPois = useMemo<MapPoi[]>(() => {
+    return languageEvents
+      .filter((event) => event.latitude && event.longitude)
+      .map((event) => ({
+        id: `event-${event.id}`,
+        type: "event" as const,
+        title: event.title,
+        subtitle: event.location_name || event.city || undefined,
+        languages: event.languages.map((code) => code.toUpperCase()),
+        time: formatEventTime(event.start_time),
+        emoji: event.emoji || "📅",
+        lat: event.latitude!,
+        lng: event.longitude!,
+        description: event.description || `${event.organizer_name ? `Organized by ${event.organizer_name}. ` : ""}${event.is_free ? "Free event" : event.price || ""}`.trim(),
+      }))
+  }, [languageEvents])
+
   const basePois = useMemo<MapPoi[]>(() => {
     if (!effectiveUserLocation) return []
     const { lat, lng } = effectiveUserLocation
-    return [
+
+    // Combine hardcoded places with real events
+    const hardcodedPlaces: MapPoi[] = [
       {
         id: "cafe-esperanto",
         type: "cafe",
@@ -1146,6 +1258,28 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
         description: "Drop-in pronunciation booths and tutoring corners for immersive practice.",
       },
       {
+        id: "cafe-matcha",
+        type: "cafe",
+        title: "Matcha & Manuscripts",
+        subtitle: "Tea house micro-meet",
+        languages: ["JP", "EN"],
+        time: "Sat • 14:00",
+        emoji: "🧋",
+        lat: lat + 0.002,
+        lng: lng + 0.007,
+        description: "Guided kanji sketching over calming tea flights.",
+      },
+    ]
+
+    // Use real events if available, otherwise keep some demo events
+    if (eventPois.length > 0) {
+      return [...hardcodedPlaces, ...eventPois]
+    }
+
+    // Fallback to demo events if no real events found
+    return [
+      ...hardcodedPlaces,
+      {
         id: "event-tandem-sunset",
         type: "event",
         title: "Sunset Tandem",
@@ -1169,20 +1303,8 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
         lng: lng + 0.005,
         description: "Pair up, plug in, and narrate your playlist picks in another language.",
       },
-      {
-        id: "cafe-matcha",
-        type: "cafe",
-        title: "Matcha & Manuscripts",
-        subtitle: "Tea house micro-meet",
-        languages: ["JP", "EN"],
-        time: "Sat • 14:00",
-        emoji: "🧋",
-        lat: lat + 0.002,
-        lng: lng + 0.007,
-        description: "Guided kanji sketching over calming tea flights.",
-      },
     ]
-  }, [effectiveUserLocation])
+  }, [effectiveUserLocation, eventPois])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -2674,15 +2796,16 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
           <div className="flex flex-1 flex-col gap-6 overflow-hidden px-4 pb-6 pt-4 md:px-8 md:pb-8 md:pt-6 lg:px-10">
             <div className="flex flex-1 flex-col gap-6 xl:flex-row xl:gap-[1px] xl:overflow-hidden">
+              {/* Left Panel - Always rendered, visibility controlled by collapse state */}
               <AnimatePresence initial={false}>
-                {!isLeftPanelCollapsed && (
+                {!isLeftPanelCollapsed ? (
                   <motion.div
                     key="left-content-panel"
                     initial={{ x: -32, opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: -32, opacity: 0 }}
                     transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="relative flex w-full flex-col gap-6 xl:max-w-[520px] xl:overflow-hidden xl:pr-2"
+                    className="relative flex w-full flex-col gap-6 xl:max-w-[520px] xl:flex-shrink-0 xl:overflow-hidden xl:pr-2"
                   >
                     <button
                       type="button"
@@ -2705,15 +2828,35 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                   </motion.div>
                 </AnimatePresence>
                   </motion.div>
+                ) : (
+                  // Collapsed state - show expand button in sidebar area
+                  <motion.div
+                    key="left-panel-collapsed"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="xl:w-14 xl:flex-shrink-0 flex items-center justify-center"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setIsLeftPanelCollapsed(false)}
+                      className="hidden xl:flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 shadow-[0_6px_20px_rgba(0,0,0,0.35)] transition hover:bg-white/10"
+                      aria-label="Expand left panel"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </motion.div>
                 )}
               </AnimatePresence>
 
+              {/* Right Panel - Map/Content (Panel 3) */}
               <div className="relative flex-1">
+                {/* Expand button for collapsed left panel on map (mobile/tablet only) */}
                 {isLeftPanelCollapsed && (
                   <button
                     type="button"
                     onClick={() => setIsLeftPanelCollapsed(false)}
-                    className="pointer-events-auto absolute top-6 left-6 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 shadow-[0_6px_20px_rgba(0,0,0,0.35)] transition hover:bg-white/10"
+                    className="pointer-events-auto absolute top-6 left-6 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 shadow-[0_6px_20px_rgba(0,0,0,0.35)] transition hover:bg-white/10 xl:hidden"
                     aria-label="Expand left panel"
                   >
                     <ChevronRight className="h-4 w-4" />
