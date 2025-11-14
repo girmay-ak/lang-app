@@ -333,10 +333,46 @@ export const chatService = {
 
       const {
         data: { user },
+        error: authError,
       } = await supabase.auth.getUser()
 
-      if (!user) return []
+      if (authError) {
+        console.error("[chatService] Auth error:", authError)
+        return []
+      }
 
+      if (!user) {
+        console.log("[chatService] No authenticated user")
+        return []
+      }
+
+      console.log("[chatService] Fetching conversations for user:", user.id)
+
+      // First, try a simple query to check if the table exists
+      const { data: simpleData, error: simpleError } = await supabase
+        .from("conversations")
+        .select("id, user1_id, user2_id, last_message, last_message_at, updated_at")
+        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+        .order("updated_at", { ascending: false })
+        .limit(10)
+
+      if (simpleError) {
+        console.error("[chatService] Simple query error:", {
+          message: simpleError.message,
+          details: simpleError.details,
+          hint: simpleError.hint,
+          code: simpleError.code,
+        })
+        return []
+      }
+
+      console.log("[chatService] Found conversations:", simpleData?.length ?? 0)
+
+      if (!simpleData || simpleData.length === 0) {
+        return []
+      }
+
+      // Now try the full query with joins
       const { data, error } = await supabase
         .from("conversations")
         .select(
@@ -348,7 +384,6 @@ export const chatService = {
           last_message_at,
           unread_count_user1,
           unread_count_user2,
-          status,
           user1:users!conversations_user1_id_fkey(id, full_name, avatar_url, is_online),
           user2:users!conversations_user2_id_fkey(id, full_name, avatar_url, is_online)
         `,
@@ -356,7 +391,26 @@ export const chatService = {
         .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
         .order("updated_at", { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error("[chatService] Full query error:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        })
+        // Fall back to simple data without user info
+        return simpleData.map((record: any) => ({
+          conversationId: record.id,
+          otherUserId: record.user1_id === user.id ? record.user2_id : record.user1_id,
+          name: "Language Partner",
+          avatar: null,
+          online: false,
+          lastMessage: record.last_message,
+          lastMessageAt: record.last_message_at,
+          unreadCount: 0,
+          isRequest: false,
+        }))
+      }
 
       return (data ?? []).map((record: any) => {
         const isUser1 = record.user1_id === user.id
@@ -372,11 +426,18 @@ export const chatService = {
           lastMessage: record.last_message,
           lastMessageAt: record.last_message_at,
           unreadCount: typeof unreadCount === "number" ? unreadCount : 0,
-          isRequest: record.status ? record.status === "pending" : false,
+          isRequest: false,
         } satisfies ConversationSummary
       })
     } catch (error) {
       console.error("[chatService] getConversationSummaries error:", error)
+      if (error instanceof Error) {
+        console.error("[chatService] Error details:", {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        })
+      }
       return []
     }
   },
