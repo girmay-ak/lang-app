@@ -456,7 +456,13 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
   const [isPeoplePanelOpen, setIsPeoplePanelOpen] = useState(false)
   const [conversations, setConversations] = useState<any[]>([])
   const [loadingChats, setLoadingChats] = useState(true)
+  const [selectedConversation, setSelectedConversation] = useState<any>(null)
+  const [chatMessages, setChatMessages] = useState<any[]>([])
+  const [loadingMessages, setLoadingMessages] = useState(false)
+  const [messageInput, setMessageInput] = useState("")
+  const [sendingMessage, setSendingMessage] = useState(false)
   const mapInstanceRef = useRef<any>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const isSidebarExpanded = !isSidebarCollapsed
   const { toast } = useToast()
@@ -607,6 +613,90 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
 
     fetchConversations()
   }, [activeSidebarItem, toast])
+
+  // Fetch messages when a conversation is selected
+  useEffect(() => {
+    if (!selectedConversation) return
+
+    const fetchMessages = async () => {
+      try {
+        setLoadingMessages(true)
+        const messages = await chatService.getMessages(selectedConversation.conversationId)
+        setChatMessages(messages)
+        
+        // Mark conversation as read
+        await chatService.markConversationRead(selectedConversation.conversationId)
+        
+        // Scroll to bottom
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+        }, 100)
+      } catch (error) {
+        console.error("Error fetching messages:", error)
+        toast({
+          title: "Failed to load messages",
+          description: "Please try again",
+          variant: "destructive",
+        })
+      } finally {
+        setLoadingMessages(false)
+      }
+    }
+
+    fetchMessages()
+
+    // Subscribe to new messages
+    const unsubscribe = chatService.subscribeToMessages(
+      selectedConversation.conversationId,
+      (newMessage) => {
+        setChatMessages((prev) => [...prev, newMessage])
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+        }, 100)
+      }
+    )
+
+    return () => {
+      unsubscribe()
+    }
+  }, [selectedConversation, toast])
+
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !selectedConversation || sendingMessage) return
+
+    try {
+      setSendingMessage(true)
+      const message = await chatService.sendMessage(
+        selectedConversation.conversationId,
+        messageInput.trim()
+      )
+      
+      setChatMessages((prev) => [...prev, message])
+      setMessageInput("")
+      
+      // Update conversation in list
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.conversationId === selectedConversation.conversationId
+            ? { ...conv, lastMessage: messageInput.trim(), lastMessageAt: new Date().toISOString() }
+            : conv
+        )
+      )
+      
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      }, 100)
+    } catch (error) {
+      console.error("Error sending message:", error)
+      toast({
+        title: "Failed to send message",
+        description: "Please try again",
+        variant: "destructive",
+      })
+    } finally {
+      setSendingMessage(false)
+    }
+  }
 
   const mapUsers = useMemo<MapUser[]>(() => {
     const viewerLanguageSet = new Set(viewerLanguages.map((lang) => lang.language.toLowerCase()))
@@ -1970,8 +2060,7 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                     whileTap={{ scale: 0.98 }}
                     whileHover={{ scale: 1.01 }}
                     onClick={() => {
-                      // TODO: Open chat modal or navigate to chat page
-                      console.log("Open conversation:", conv.conversationId)
+                      setSelectedConversation(conv)
                     }}
                     className="glass-card w-full p-4 text-left transition-all relative overflow-hidden group"
                   >
@@ -2843,15 +2932,171 @@ export function MapView({ onSetFlag, onProfileModalChange, onRegisterAvailabilit
                     </motion.button>
                   </div>
 
-                  {activeSidebarItem !== "discover" && (
+                  {activeSidebarItem !== "discover" && !selectedConversation && (
                     <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                      <div className="max-w-sm rounded-2xl border border-white/8 bg-[rgba(20,20,30,0.6)] px-6 py-6 text-center text-sm text-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-[12px]">
-                        <p className="text-sm font-semibold text-white">
+                      <div className="glass-panel max-w-sm px-6 py-6 text-center text-sm text-white">
+                        <p className="text-sm font-bold text-white">
                           Switch back to Discover to explore the map.
                         </p>
-                        <p className="mt-2 text-xs text-white/80">
+                        <p className="mt-2 text-xs text-white/60">
                           The map remains live in the background while you browse other sections.
                         </p>
+                        <Button
+                          onClick={() => setActiveSidebarItem("discover")}
+                          className="mt-4 w-full rounded-xl bg-gradient-to-r from-[#7B42F6] to-[#5430F0] text-white hover:opacity-90 shadow-[0_0_8px_rgba(123,66,246,0.3)]"
+                        >
+                          Back to Discover
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Chat Interface Overlay */}
+                  {selectedConversation && (
+                    <div className="pointer-events-auto absolute inset-0 bg-[#0B0F19]/95 backdrop-blur-md">
+                      <div className="flex h-full flex-col">
+                        {/* Chat Header */}
+                        <div className="flex items-center gap-4 border-b border-white/10 bg-white/5 px-6 py-4 backdrop-blur-xl">
+                          <button
+                            onClick={() => setSelectedConversation(null)}
+                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-white transition hover:bg-white/10"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+                          
+                          <div className="relative flex-shrink-0">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-sm font-bold text-white shadow-[0_0_12px_rgba(123,66,246,0.3)]">
+                              {selectedConversation.avatar ? (
+                                <img 
+                                  src={selectedConversation.avatar} 
+                                  alt={selectedConversation.name} 
+                                  className="h-full w-full rounded-full object-cover" 
+                                />
+                              ) : (
+                                selectedConversation.name.slice(0, 2).toUpperCase()
+                              )}
+                            </div>
+                            {selectedConversation.online && (
+                              <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#0B0F19] bg-[#3CEAD7] shadow-[0_0_8px_rgba(60,234,215,0.6)]" />
+                            )}
+                          </div>
+                          
+                          <div className="flex-1">
+                            <h3 className="text-lg font-bold text-white">{selectedConversation.name}</h3>
+                            <p className="text-xs text-[#3CEAD7]">
+                              {selectedConversation.online ? "Active now" : "Offline"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Messages Container */}
+                        <div className="flex-1 overflow-y-auto px-6 py-6">
+                          {loadingMessages ? (
+                            <div className="flex h-full items-center justify-center">
+                              <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-[#7B42F6]" />
+                            </div>
+                          ) : chatMessages.length === 0 ? (
+                            <div className="flex h-full flex-col items-center justify-center text-center">
+                              <MessageCircle className="h-16 w-16 text-white/20" />
+                              <p className="mt-4 text-sm font-semibold text-white">No messages yet</p>
+                              <p className="mt-1 text-xs text-white/50">Start the conversation!</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {chatMessages.map((msg, index) => {
+                                const isCurrentUser = msg.sender_id === currentUserProfile?.id
+                                const showAvatar = index === 0 || chatMessages[index - 1].sender_id !== msg.sender_id
+                                const messageTime = new Date(msg.created_at).toLocaleTimeString('en-US', { 
+                                  hour: 'numeric', 
+                                  minute: '2-digit' 
+                                })
+
+                                return (
+                                  <motion.div
+                                    key={msg.id}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className={cn(
+                                      "flex gap-3",
+                                      isCurrentUser ? "flex-row-reverse" : "flex-row"
+                                    )}
+                                  >
+                                    {!isCurrentUser && (
+                                      <div className="flex-shrink-0">
+                                        {showAvatar ? (
+                                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-xs font-bold text-white">
+                                            {selectedConversation.avatar ? (
+                                              <img 
+                                                src={selectedConversation.avatar} 
+                                                alt={selectedConversation.name} 
+                                                className="h-full w-full rounded-full object-cover" 
+                                              />
+                                            ) : (
+                                              selectedConversation.name.slice(0, 2).toUpperCase()
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <div className="h-8 w-8" />
+                                        )}
+                                      </div>
+                                    )}
+                                    
+                                    <div className={cn(
+                                      "flex max-w-[70%] flex-col gap-1",
+                                      isCurrentUser ? "items-end" : "items-start"
+                                    )}>
+                                      <div className={cn(
+                                        "rounded-2xl px-4 py-3 backdrop-blur-xl",
+                                        isCurrentUser
+                                          ? "bg-gradient-to-br from-[#7B42F6] to-[#5430F0] text-white shadow-[0_4px_16px_rgba(123,66,246,0.3)]"
+                                          : "bg-white/10 text-white border border-white/10"
+                                      )}>
+                                        <p className="text-sm leading-relaxed">{msg.content}</p>
+                                      </div>
+                                      <span className="text-[10px] text-white/40">{messageTime}</span>
+                                    </div>
+                                  </motion.div>
+                                )
+                              })}
+                              <div ref={messagesEndRef} />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Message Input */}
+                        <div className="border-t border-white/10 bg-white/5 px-6 py-4 backdrop-blur-xl">
+                          <div className="flex items-end gap-3">
+                            <div className="flex-1">
+                              <Textarea
+                                value={messageInput}
+                                onChange={(e) => setMessageInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault()
+                                    handleSendMessage()
+                                  }
+                                }}
+                                placeholder="Type a message..."
+                                className="min-h-[52px] max-h-[120px] resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/40 focus:border-[#7B42F6] focus:bg-white/8 focus:outline-none backdrop-blur-xl"
+                                disabled={sendingMessage}
+                              />
+                            </div>
+                            <Button
+                              onClick={handleSendMessage}
+                              disabled={!messageInput.trim() || sendingMessage}
+                              className="h-[52px] w-[52px] flex-shrink-0 rounded-xl bg-gradient-to-br from-[#7B42F6] to-[#5430F0] p-0 text-white shadow-[0_0_16px_rgba(123,66,246,0.4)] transition-all hover:scale-105 hover:shadow-[0_0_24px_rgba(123,66,246,0.5)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                            >
+                              {sendingMessage ? (
+                                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                              ) : (
+                                <MessageCircle className="h-5 w-5" />
+                              )}
+                            </Button>
+                          </div>
+                          <p className="mt-2 text-[10px] text-white/40">
+                            Press Enter to send • Shift + Enter for new line
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
