@@ -69,32 +69,69 @@ export const mapService = {
     try {
       const supabase = createClient()
 
-      const { data, error } = await supabase.rpc("find_nearby_users", {
-        user_lat: latitude,
-        user_lng: longitude,
-        radius_km: radiusKm,
-      })
-
-      if (error) {
-        console.warn("[mapService] find_nearby_users RPC unavailable, falling back to query.", error)
-        return this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
+      // Check if Supabase is configured
+      if (!supabase) {
+        console.error("[mapService] Supabase client not available")
+        return []
       }
 
-      const rpcUsers = applyFilters(Array.isArray(data) ? data : [], filters)
+      let rpcUsers: NearbyUser[] = []
+      
+      try {
+        const { data, error } = await supabase.rpc("find_nearby_users", {
+          user_lat: latitude,
+          user_lng: longitude,
+          radius_km: radiusKm,
+        })
+
+        if (error) {
+          console.warn("[mapService] find_nearby_users RPC unavailable, falling back to query.", error)
+          return this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
+        }
+
+        rpcUsers = applyFilters(Array.isArray(data) ? data : [], filters)
+      } catch (rpcError: any) {
+        console.warn("[mapService] RPC call failed, using fallback:", rpcError.message)
+        // Continue to fallback
+      }
+
+      // Always try fallback method
       const fallbackUsers = await this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
+      
+      if (!fallbackUsers.length && !rpcUsers.length) {
+        return []
+      }
+
       if (!fallbackUsers.length) {
         return rpcUsers
       }
 
+      // Merge results
       const merged = new Map<string, NearbyUser>()
       for (const user of [...rpcUsers, ...fallbackUsers]) {
         merged.set(user.id, { ...merged.get(user.id), ...user })
       }
 
       return Array.from(merged.values())
-    } catch (error) {
+    } catch (error: any) {
       console.error("[mapService] findNearbyUsers error:", error)
-      return this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
+      
+      // More detailed error logging
+      if (error.message?.includes('Failed to fetch')) {
+        console.error("[mapService] Network error - check:")
+        console.error("  1. NEXT_PUBLIC_SUPABASE_URL is set correctly")
+        console.error("  2. NEXT_PUBLIC_SUPABASE_ANON_KEY is set correctly")
+        console.error("  3. Supabase project is accessible")
+        console.error("  4. Internet connection is working")
+      }
+      
+      // Try fallback as last resort
+      try {
+        return await this.findNearbyUsersFallback(latitude, longitude, radiusKm, filters)
+      } catch (fallbackError) {
+        console.error("[mapService] Fallback also failed:", fallbackError)
+        return []
+      }
     }
   },
 
@@ -104,10 +141,17 @@ export const mapService = {
     radiusKm: number = 50,
     filters?: FindNearbyFilters,
   ): Promise<NearbyUser[]> {
-    const supabase = createClient()
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser()
+    try {
+      const supabase = createClient()
+      
+      if (!supabase) {
+        console.error("[mapService] Supabase client not available in fallback")
+        return []
+      }
+      
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser()
 
     let query = supabase
       .from("users")
@@ -141,6 +185,18 @@ export const mapService = {
 
     if (error) {
       console.error("[mapService] findNearbyUsersFallback query error:", error)
+      if (error.message?.includes('Failed to fetch')) {
+        console.error("[mapService] Network error in fallback query:")
+        console.error("  - Check internet connection")
+        console.error("  - Check Supabase project status")
+        console.error("  - Verify NEXT_PUBLIC_SUPABASE_URL is correct")
+      }
+      return []
+    }
+    
+    // Handle case where data is null or undefined
+    if (!data) {
+      console.warn("[mapService] No data returned from fallback query")
       return []
     }
 
@@ -178,6 +234,15 @@ export const mapService = {
       .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
 
     return applyFilters(withinRadius, filters)
+    } catch (fallbackError: any) {
+      console.error("[mapService] findNearbyUsersFallback unexpected error:", fallbackError)
+      if (fallbackError.message?.includes('Failed to fetch')) {
+        console.error("[mapService] Network error in fallback:")
+        console.error("  Error details:", fallbackError.message)
+        console.error("  Check Supabase connection and environment variables")
+      }
+      return []
+    }
   },
 }
 

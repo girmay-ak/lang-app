@@ -1,38 +1,20 @@
-import type React from "react"
-import type { Metadata, Viewport } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
-import "./globals.css"
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import { Analytics } from '@vercel/analytics/next'
+import './globals.css'
+import 'mapbox-gl/dist/mapbox-gl.css'
+import { ThemeProvider } from '@/components/theme-provider'
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-})
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-})
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Language Flag Exchange",
-  description: "Find nearby language practice partners",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "Language Exchange",
+  title: 'TaalMeet - Where Languages Meet',
+  description: 'Connect with native speakers nearby for real language practice. Master languages through authentic conversations.',
+  generator: 'v0.app',
+  icons: {
+    icon: '/taalmeet-icon.svg',
+    apple: '/taalmeet-icon.svg',
   },
-  generator: "v0.app",
-}
-
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 5,
-  userScalable: true,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#1e293b" },
-  ],
 }
 
 export default function RootLayout({
@@ -42,16 +24,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet" />
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Language Exchange" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
-      </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning>{children}</body>
+      <body className={`font-sans antialiased`}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
+        <Analytics />
+      </body>
     </html>
   )
 }

@@ -1,205 +1,359 @@
-"use client"
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Pencil, Globe, MapPin, Calendar, Mail, Phone } from "lucide-react"
-import { useState } from "react"
+'use client'
 
-const ProfilePage = () => {
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ArrowLeft, Camera, Save, MapPin, Globe, Mail, Calendar, Loader2 } from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
+import Link from 'next/link'
+
+export default function ProfilePage() {
+  const router = useRouter()
+  const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState({
-    full_name: "John Doe",
-    bio: "Software Developer",
-    email: "john.doe@example.com",
-    phone: "123-456-7890",
-    location: "New York",
-    is_available: true,
-    native_languages: ["English", "Spanish"],
-    learning_languages: ["French", "German"],
-    created_at: new Date().toISOString(),
+    full_name: '',
+    bio: '',
+    city: '',
+    country: '',
+    avatar_url: ''
   })
-  const [isEditing, setIsEditing] = useState(false)
-  const [showLanguageSelector, setShowLanguageSelector] = useState(false)
+  const [languages, setLanguages] = useState<any[]>([])
+
+  useEffect(() => {
+    loadProfile()
+  }, [])
+
+  const loadProfile = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        router.push('/')
+        return
+      }
+
+      setUser(session.user)
+
+      // Get user profile
+      const { data: profileData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', session.user.id)
+        .single()
+
+      if (profileData) {
+        setProfile({
+          full_name: profileData.full_name || '',
+          bio: profileData.bio || '',
+          city: profileData.city || '',
+          country: profileData.country || '',
+          avatar_url: profileData.avatar_url || ''
+        })
+      }
+
+      // Get user languages
+      const { data: languagesData } = await supabase
+        .from('user_languages')
+        .select('*')
+        .eq('user_id', session.user.id)
+
+      if (languagesData) {
+        setLanguages(languagesData)
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to load profile',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!user) return
+
+    setIsSaving(true)
+    try {
+      const supabase = createClient()
+      
+      const { error } = await supabase
+        .from('users')
+        .update({
+          full_name: profile.full_name,
+          bio: profile.bio,
+          city: profile.city,
+          country: profile.country,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id)
+
+      if (error) throw error
+
+      toast({
+        title: 'Success!',
+        description: 'Your profile has been updated',
+      })
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update profile',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSignOut = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/')
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading profile...</p>
+        </div>
+      </div>
+    )
+  }
+
+  const languageNames: any = {
+    'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+    'nl': 'Dutch', 'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian',
+    'ar': 'Arabic', 'zh': 'Chinese', 'ja': 'Japanese', 'ko': 'Korean'
+  }
+
+  const languageFlags: any = {
+    'en': '🇬🇧', 'es': '🇪🇸', 'fr': '🇫🇷', 'de': '🇩🇪',
+    'nl': '🇳🇱', 'it': '🇮🇹', 'pt': '🇵🇹', 'ru': '🇷🇺',
+    'ar': '🇸🇦', 'zh': '🇨🇳', 'ja': '🇯🇵', 'ko': '🇰🇷'
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-purple-900 dark:to-pink-900">
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Profile Header Card */}
-        <Card className="p-6 mb-6 card-float">
-          <div className="flex flex-col md:flex-row gap-6 items-start">
-            {/* Avatar */}
-            <div className="relative">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-3xl font-bold">
-                {profile.full_name?.charAt(0).toUpperCase() || "U"}
-              </div>
-              {profile.is_available && (
-                <div className="absolute bottom-0 right-0 w-6 h-6 bg-green-500 rounded-full border-4 border-white dark:border-gray-800 animate-pulse-ring" />
-              )}
-            </div>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="border-b border-border bg-card/30 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link href="/dashboard">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Dashboard
+            </Button>
+          </Link>
+          <Button variant="outline" onClick={handleSignOut}>
+            Sign Out
+          </Button>
+        </div>
+      </div>
 
-            {/* Profile Info */}
-            <div className="flex-1">
-              <div className="flex items-start justify-between mb-2">
+      <div className="max-w-5xl mx-auto px-6 py-12">
+        <div className="space-y-8">
+          {/* Profile Header */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-3xl">My Profile</CardTitle>
+              <CardDescription>Manage your TaalMeet profile and preferences</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Avatar */}
+              <div className="flex items-center gap-6">
+                <Avatar className="w-24 h-24">
+                  <AvatarImage src={profile.avatar_url} />
+                  <AvatarFallback className="text-2xl bg-gradient-to-br from-pink-500 to-teal-500 text-white">
+                    {profile.full_name.charAt(0).toUpperCase() || 'U'}
+                  </AvatarFallback>
+                </Avatar>
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
-                    {profile.full_name || "Anonymous User"}
-                  </h1>
-                  {profile.bio && <p className="text-gray-600 dark:text-gray-300 text-lg">{profile.bio}</p>}
+                  <Button variant="outline" size="sm">
+                    <Camera className="w-4 h-4 mr-2" />
+                    Change Photo
+                  </Button>
+                  <p className="text-sm text-muted-foreground mt-2">JPG, PNG or GIF (max. 2MB)</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="gap-2">
-                  <Pencil className="w-4 h-4" />
-                  Edit
+              </div>
+
+              {/* Name */}
+              <div>
+                <Label htmlFor="name">Full Name</Label>
+                <Input
+                  id="name"
+                  value={profile.full_name}
+                  onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
+                  placeholder="Your name"
+                  className="mt-2"
+                />
+              </div>
+
+              {/* Email (read-only) */}
+              <div>
+                <Label>Email</Label>
+                <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-muted rounded-md text-muted-foreground">
+                  <Mail className="w-4 h-4" />
+                  {user?.email}
+                </div>
+              </div>
+
+              {/* Bio */}
+              <div>
+                <Label htmlFor="bio">Bio</Label>
+                <Textarea
+                  id="bio"
+                  value={profile.bio}
+                  onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+                  placeholder="Tell others about yourself..."
+                  rows={4}
+                  className="mt-2"
+                />
+              </div>
+
+              {/* Location */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    value={profile.city}
+                    onChange={(e) => setProfile({ ...profile, city: e.target.value })}
+                    placeholder="Amsterdam"
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="country">Country</Label>
+                  <Input
+                    id="country"
+                    value={profile.country}
+                    onChange={(e) => setProfile({ ...profile, country: e.target.value })}
+                    placeholder="Netherlands"
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <Button 
+                onClick={handleSave} 
+                disabled={isSaving}
+                className="w-full bg-gradient-to-r from-pink-500 to-teal-500 hover:from-pink-600 hover:to-teal-600"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Languages Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Languages</CardTitle>
+              <CardDescription>Languages you speak and want to learn</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Native Languages */}
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <span className="text-pink-500">●</span>
+                    I Speak
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {languages
+                      .filter(l => l.language_type === 'native')
+                      .map(lang => (
+                        <Badge key={lang.id} variant="secondary" className="text-base py-2 px-4">
+                          <span className="mr-2">{languageFlags[lang.language_code] || '🌍'}</span>
+                          {languageNames[lang.language_code] || lang.language_code}
+                          <span className="ml-2 text-xs text-muted-foreground">Native</span>
+                        </Badge>
+                      ))}
+                    {languages.filter(l => l.language_type === 'native').length === 0 && (
+                      <p className="text-sm text-muted-foreground">No languages added yet</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Learning Languages */}
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <span className="text-teal-500">●</span>
+                    I'm Learning
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {languages
+                      .filter(l => l.language_type === 'learning')
+                      .map(lang => (
+                        <Badge key={lang.id} variant="secondary" className="text-base py-2 px-4">
+                          <span className="mr-2">{languageFlags[lang.language_code] || '🌍'}</span>
+                          {languageNames[lang.language_code] || lang.language_code}
+                          <span className="ml-2 text-xs text-muted-foreground capitalize">{lang.proficiency_level}</span>
+                        </Badge>
+                      ))}
+                    {languages.filter(l => l.language_type === 'learning').length === 0 && (
+                      <p className="text-sm text-muted-foreground">No languages added yet</p>
+                    )}
+                  </div>
+                </div>
+
+                <Button variant="outline" className="w-full mt-4">
+                  <Globe className="w-4 h-4 mr-2" />
+                  Add Language
                 </Button>
               </div>
+            </CardContent>
+          </Card>
 
-              {/* Contact Info */}
-              <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-600 dark:text-gray-400">
-                {profile.email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-4 h-4" />
-                    {profile.email}
-                  </div>
-                )}
-                {profile.phone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4" />
-                    {profile.phone}
-                  </div>
-                )}
-                {profile.location && (
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />
-                    {profile.location}
-                  </div>
-                )}
+          {/* Account Info */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Account Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Member since</span>
+                <span className="font-medium flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}
+                </span>
               </div>
-
-              {/* Availability Badge */}
-              <div className="mt-4">
-                <Badge variant={profile.is_available ? "default" : "secondary"} className="text-sm">
-                  {profile.is_available ? "Available for Exchange" : "Not Available"}
-                </Badge>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Location</span>
+                <span className="font-medium flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  {profile.city && profile.country ? `${profile.city}, ${profile.country}` : 'Not set'}
+                </span>
               </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Languages Section with Flag Display */}
-        <Card className="p-6 mb-6 card-float">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Globe className="w-6 h-6" />
-              My Languages
-            </h2>
-            <Button variant="outline" size="sm" onClick={() => setShowLanguageSelector(true)} className="gap-2">
-              <Pencil className="w-4 h-4" />
-              Edit Languages
-            </Button>
-          </div>
-
-          {profile.native_languages && profile.native_languages.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-                Native Languages
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {profile.native_languages.map((lang) => (
-                  <div
-                    key={lang}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-2 border-blue-200 dark:border-blue-700 card-transition hover:shadow-lg"
-                  >
-                    <span className="text-4xl">{getLanguageFlag(lang)}</span>
-                    <span className="font-medium text-gray-900 dark:text-white text-sm">{lang}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {profile.learning_languages && profile.learning_languages.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-                Learning Languages
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {profile.learning_languages.map((lang) => (
-                  <div
-                    key={lang}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-green-50 to-teal-50 dark:from-green-900/20 dark:to-teal-900/20 border-2 border-green-200 dark:border-green-700 card-transition hover:shadow-lg"
-                  >
-                    <span className="text-4xl">{getLanguageFlag(lang)}</span>
-                    <span className="font-medium text-gray-900 dark:text-white text-sm">{lang}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {(!profile.native_languages || profile.native_languages.length === 0) &&
-            (!profile.learning_languages || profile.learning_languages.length === 0) && (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <Globe className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No languages added yet. Click "Edit Languages" to get started!</p>
-              </div>
-            )}
-        </Card>
-
-        {/* Stats Card */}
-        <Card className="p-6 card-float">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Calendar className="w-6 h-6" />
-            Activity
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div className="text-center p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20">
-              <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                {profile.native_languages?.length || 0}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Native Languages</div>
-            </div>
-            <div className="text-center p-4 rounded-lg bg-green-50 dark:bg-green-900/20">
-              <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-                {profile.learning_languages?.length || 0}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Learning Languages</div>
-            </div>
-            <div className="text-center p-4 rounded-lg bg-purple-50 dark:bg-purple-900/20">
-              <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                {new Date(profile.created_at).toLocaleDateString()}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Member Since</div>
-            </div>
-          </div>
-        </Card>
-      </main>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   )
 }
 
-// Helper function to get language flags
-function getLanguageFlag(language: string): string {
-  const flagMap: Record<string, string> = {
-    English: "🇬🇧",
-    Spanish: "🇪🇸",
-    French: "🇫🇷",
-    German: "🇩🇪",
-    Italian: "🇮🇹",
-    Portuguese: "🇵🇹",
-    Russian: "🇷🇺",
-    Chinese: "🇨🇳",
-    Japanese: "🇯🇵",
-    Korean: "🇰🇷",
-    Arabic: "🇸🇦",
-    Hindi: "🇮🇳",
-    Dutch: "🇳🇱",
-    Swedish: "🇸🇪",
-    Polish: "🇵🇱",
-    Turkish: "🇹🇷",
-    Greek: "🇬🇷",
-    Hebrew: "🇮🇱",
-    Thai: "🇹🇭",
-    Vietnamese: "🇻🇳",
-  }
-  return flagMap[language] || "🌐"
-}
-
-export default ProfilePage

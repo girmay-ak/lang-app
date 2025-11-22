@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/backend/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {
@@ -31,6 +31,7 @@ export async function GET(request: Request) {
     }
   }
 
-  // Redirect to the main app after successful authentication
-  return NextResponse.redirect(`${origin}/app`)
+  // Redirect to the dashboard after successful authentication
+  return NextResponse.redirect(`${origin}/dashboard`)
 }
+

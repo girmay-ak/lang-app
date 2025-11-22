@@ -417,13 +417,25 @@ export function MapboxMap({
     (map: any, mapboxgl: any, nextUsers: User[], nextPois: MapPoi[]) => {
       clearMarkers()
 
+      console.log('[MapboxMap] Rendering markers for', nextUsers.length, 'users')
+
+      // Collect all valid coordinates for bounds calculation
+      const validCoordinates: [number, number][] = []
+
       nextUsers.forEach((user) => {
         if (typeof user.lng !== "number" || typeof user.lat !== "number") {
+          console.warn('[MapboxMap] Skipping user with invalid coordinates:', user.name, { lat: user.lat, lng: user.lng })
           return
         }
+        validCoordinates.push([user.lng, user.lat])
+        
+        console.log('[MapboxMap] Creating marker for user:', user.name, 'at', user.lat, user.lng)
+        
         const container = document.createElement("div")
-        container.style.width = "96px"
+        container.style.width = "140px"  // w-28 = 112px + padding
+        container.style.height = "auto"
         container.style.pointerEvents = "auto"
+        container.style.zIndex = "100" // Higher z-index to appear above radar
         const root = createRoot(container)
         root.render(<UserMarker user={user} onSelect={() => onUserClick(user)} />)
 
@@ -431,6 +443,7 @@ export function MapboxMap({
           .setLngLat([user.lng, user.lat])
           .addTo(map)
 
+        console.log('[MapboxMap] Marker added for:', user.name)
         markersRef.current.push({ marker, root })
       })
 
@@ -438,9 +451,13 @@ export function MapboxMap({
         if (typeof poi.lng !== "number" || typeof poi.lat !== "number") {
           return
         }
+        validCoordinates.push([poi.lng, poi.lat])
+        
         const container = document.createElement("div")
-        container.style.width = "96px"
+        container.style.width = "120px"  // w-24 = 96px + padding
+        container.style.height = "auto"
         container.style.pointerEvents = "auto"
+        container.style.zIndex = "100" // Higher z-index to appear above radar
         const root = createRoot(container)
         root.render(<PoiMarker poi={poi} onSelect={() => onPoiClick?.(poi)} />)
 
@@ -450,6 +467,22 @@ export function MapboxMap({
 
         markersRef.current.push({ marker, root })
       })
+
+      console.log('[MapboxMap] Total markers created:', markersRef.current.length)
+      console.log('[MapboxMap] Valid coordinates for bounds:', validCoordinates.length)
+
+      // Fit map to show all markers
+      if (validCoordinates.length > 1 && typeof map.fitBounds === "function") {
+        const bounds = validCoordinates.reduce((bounds, coord) => {
+          return bounds.extend(coord)
+        }, new mapboxgl.default.LngLatBounds(validCoordinates[0], validCoordinates[0]))
+
+        map.fitBounds(bounds, {
+          padding: { top: 100, bottom: 100, left: 100, right: 100 },
+          maxZoom: 14,
+          duration: 1000
+        })
+      }
     },
     [clearMarkers, onUserClick, onPoiClick],
   )

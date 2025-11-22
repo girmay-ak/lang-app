@@ -1,23 +1,37 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
+import { X } from "lucide-react"
+
+export interface FilterState {
+  languages: string[]
+  availableOnly: boolean
+  distance: number
+  minMatch: number
+  minRating: number
+  nativeLanguages?: string[]
+  learningLanguages?: string[]
+}
 
 interface FilterPanelProps {
   isOpen: boolean
   onClose: () => void
+  onFilterChange?: (filters: FilterState) => void
+  currentFilters?: FilterState
 }
 
-export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
+export function FilterPanel({ isOpen, onClose, onFilterChange, currentFilters }: FilterPanelProps) {
+  // Initialize state from currentFilters if provided, otherwise use defaults
   const [searchTerm, setSearchTerm] = useState("")
-  const [distance, setDistance] = useState([2.5])
-  const [rating, setRating] = useState([4])
+  const [distance, setDistance] = useState(currentFilters?.distance ? [currentFilters.distance] : [2.5])
+  const [rating, setRating] = useState(currentFilters?.minRating ? [currentFilters.minRating] : [4])
   const [ageRange, setAgeRange] = useState<[number, number]>([22, 35])
-  const [availability, setAvailability] = useState({ now: true, today: false, week: false })
+  const [availability, setAvailability] = useState({ now: currentFilters?.availableOnly || false, today: false, week: false })
   const [levels, setLevels] = useState({ beginner: false, intermediate: true, advanced: true, native: false })
   const [userTypes, setUserTypes] = useState({ verified: true, premium: false, new: false })
   const [times, setTimes] = useState({ morning: false, afternoon: true, evening: true, lateNight: false })
@@ -26,8 +40,53 @@ export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
   const [goals, setGoals] = useState({ conversational: false, business: false, travel: false, exam: false, fun: false })
   const [interests, setInterests] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<"distance" | "rating" | "activity" | "match" | "recent">("distance")
-  const [nativeLanguages, setNativeLanguages] = useState<string[]>(["🇳🇱 Dutch", "🇩🇪 German"])
-  const [learningLanguages, setLearningLanguages] = useState<string[]>(["🇬🇧 English", "🇪🇸 Spanish"])
+  const [nativeLanguages, setNativeLanguages] = useState<string[]>(currentFilters?.nativeLanguages || ["🇳🇱 Dutch", "🇩🇪 German"])
+  const [learningLanguages, setLearningLanguages] = useState<string[]>(currentFilters?.learningLanguages || ["🇬🇧 English", "🇪🇸 Spanish"])
+  
+  // Extract language codes from language strings (e.g., "🇬🇧 English" -> "en")
+  const getLanguageCode = (langString: string): string => {
+    const langMap: Record<string, string> = {
+      "🇳🇱 Dutch": "nl",
+      "🇬🇧 English": "en",
+      "🇩🇪 German": "de",
+      "🇪🇸 Spanish": "es",
+      "🇫🇷 French": "fr",
+      "🇯🇵 Japanese": "ja",
+      "🇰🇷 Korean": "ko",
+      "🇨🇳 Mandarin": "zh",
+    }
+    return langMap[langString] || ""
+  }
+
+  // Update parent filters when values change
+  const updateFilters = () => {
+    if (onFilterChange) {
+      const languageCodes = [
+        ...nativeLanguages.map(getLanguageCode).filter(Boolean),
+        ...learningLanguages.map(getLanguageCode).filter(Boolean),
+      ]
+      
+      onFilterChange({
+        languages: [...new Set(languageCodes)], // Remove duplicates
+        availableOnly: availability.now,
+        distance: distance[0],
+        minMatch: 0, // Can be calculated from other filters if needed
+        minRating: rating[0],
+        nativeLanguages,
+        learningLanguages,
+      })
+    }
+  }
+  
+  // Sync filter changes - call updateFilters when relevant values change
+  useEffect(() => {
+    if (onFilterChange) {
+      const timer = setTimeout(() => {
+        updateFilters()
+      }, 300) // Debounce updates
+      return () => clearTimeout(timer)
+    }
+  }, [nativeLanguages, learningLanguages, availability.now, distance, rating])
 
   const interestOptions = useMemo(
     () => ["Sports", "Music", "Gaming", "Art", "Tech", "Travel", "Food", "Books", "Movies"],
@@ -47,7 +106,7 @@ export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
     setDistance([2.5])
     setRating([4])
     setAgeRange([22, 35])
-    setAvailability({ now: true, today: false, week: false })
+    setAvailability({ now: false, today: false, week: false })
     setLevels({ beginner: false, intermediate: true, advanced: true, native: false })
     setUserTypes({ verified: true, premium: false, new: false })
     setTimes({ morning: false, afternoon: true, evening: true, lateNight: false })
@@ -56,8 +115,45 @@ export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
     setGoals({ conversational: false, business: false, travel: false, exam: false, fun: false })
     setInterests([])
     setSortBy("distance")
-    setNativeLanguages(["🇳🇱 Dutch", "🇩🇪 German"])
-    setLearningLanguages(["🇬🇧 English", "🇪🇸 Spanish"])
+    setNativeLanguages([])
+    setLearningLanguages([])
+    
+    // Update parent filters
+    if (onFilterChange) {
+      onFilterChange({
+        languages: [],
+        availableOnly: false,
+        distance: 2.5,
+        minMatch: 0,
+        minRating: 4,
+        nativeLanguages: [],
+        learningLanguages: [],
+      })
+    }
+  }
+
+  // Apply filters button handler
+  const handleApplyFilters = () => {
+    updateFilters()
+    onClose()
+  }
+  
+  // Handle distance change
+  const handleDistanceChange = (value: number[]) => {
+    setDistance(value)
+  }
+  
+  // Handle rating change
+  const handleRatingChange = (value: number[]) => {
+    setRating(value)
+  }
+  
+  // Handle availability change
+  const handleAvailabilityChange = (key: keyof typeof availability) => {
+    setAvailability((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }))
   }
 
   if (!isOpen) return null
@@ -135,7 +231,7 @@ export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
                   </header>
                   <p className="mt-2 text-xs uppercase tracking-[0.25em] text-white/40">0.5 km – 10 km</p>
                   <div className="mt-6">
-                    <Slider value={distance} onValueChange={setDistance} max={10} min={0.5} step={0.1} />
+                    <Slider value={distance} onValueChange={(val) => handleDistanceChange(val)} max={50} min={0.5} step={0.5} />
                   </div>
                 </section>
 
@@ -146,7 +242,7 @@ export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
                   </header>
                   <p className="mt-2 text-xs uppercase tracking-[0.25em] text-white/40">0.0 – 5.0</p>
                   <div className="mt-6">
-                    <Slider value={rating} onValueChange={setRating} max={5} min={0} step={0.1} />
+                    <Slider value={rating} onValueChange={(val) => handleRatingChange(val)} max={5} min={0} step={0.1} />
                   </div>
                 </section>
               </div>
@@ -491,7 +587,7 @@ export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
               </Button>
               <Button
                 className="h-11 rounded-full bg-gradient-to-r from-[#00FF88] to-[#00D9FF] px-6 text-sm font-semibold text-slate-900 shadow-[0_14px_45px_rgba(0,255,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_55px_rgba(0,255,136,0.5)]"
-                onClick={onClose}
+                onClick={handleApplyFilters}
               >
                 Apply Filters
               </Button>
@@ -502,3 +598,9 @@ export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
     </>
   )
 }
+
+// Export FilterState type for use in other components
+export type { FilterState }
+
+// Export FilterState type for use in other components
+export type { FilterState }

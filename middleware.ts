@@ -1,4 +1,6 @@
-import { updateSession } from "@/lib/supabase/middleware"
+// Re-export middleware from backend
+// This keeps auth working after backend organization
+import { updateSession } from "@/backend/lib/supabase/middleware"
 
 export async function middleware(request: Request) {
   return await updateSession(request)
